@@ -17,6 +17,7 @@
 	// Status bubble animation: memberId -> { message, timeoutId }
 	let statusBubbles = $state<Record<string, { message: string }>>({});
 	let prevStatuses: Record<string, string> = {};
+	let showOwnerActions = $state(false);
 
 	// Detect status changes and show bubble
 	$effect(() => {
@@ -94,7 +95,18 @@
 </script>
 
 <div class="card users-card">
-	<h2>{t('online_users', $locale)}</h2>
+	<div class="users-header">
+		<h2>{t('online_users', $locale)}</h2>
+		{#if isOwner}
+			<button
+				class="btn-ghost btn-xs btn-toggle-actions"
+				class:active={showOwnerActions}
+				onclick={() => (showOwnerActions = !showOwnerActions)}
+			>
+				⚙
+			</button>
+		{/if}
+	</div>
 
 	<!-- Status input for current user -->
 	<div class="status-input-row">
@@ -152,7 +164,7 @@
 						</div>
 					</div>
 					<div class="user-pomodoro">
-						{#if isOwner && user.id !== currentMemberId}
+						{#if showOwnerActions && isOwner && user.id !== currentMemberId}
 							{#if user.is_persistent}
 								<button
 									class="btn-transfer btn-xs"
@@ -163,8 +175,7 @@
 							<button class="btn-kick btn-xs" onclick={() => handleKick(user.id)}
 								>{t('kick', $locale)}</button
 							>
-						{/if}
-						{#if user.pomodoro?.phase && user.pomodoro.phase !== 'idle'}
+						{:else if user.pomodoro?.phase && user.pomodoro.phase !== 'idle'}
 							{#if user.pomodoro.is_following}
 								<span class="following"
 									>{t('following', $locale)} {user.pomodoro.leader_username}</span
@@ -199,10 +210,33 @@
 </div>
 
 <style>
+	.users-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.75rem;
+	}
+	.users-header h2 {
+		font-size: var(--text-base);
+		font-weight: 600;
+		color: var(--color-fg-1);
+		margin: 0;
+		line-height: 1;
+	}
+	.btn-toggle-actions {
+		font-size: 0.8rem;
+		opacity: 0.4;
+		padding: 0.15rem 0.3rem;
+		line-height: 1;
+		transition: opacity 0.15s;
+	}
+	.btn-toggle-actions:hover,
+	.btn-toggle-actions.active {
+		opacity: 1;
+	}
 	.users-card h2 {
 		font-size: var(--text-base);
 		font-weight: 600;
-		margin-bottom: 0.75rem;
 		color: var(--color-fg-1);
 	}
 	.status-input-row {
