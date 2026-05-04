@@ -116,7 +116,7 @@ type UpgradeRequest struct {
 // StartPomodoroRequest is the request for starting a pomodoro
 type StartPomodoroRequest struct {
 	RoomName                string `json:"room_name"`
-	ProjectID               string `json:"project_id,omitempty"`
+	TagID                   string `json:"tag_id,omitempty"`
 	TaskID                  string `json:"task_id,omitempty"`
 	PlannedDuration         int    `json:"planned_duration"`
 	RestDuration            int    `json:"rest_duration"`
@@ -161,14 +161,14 @@ type SetOwnerRequest struct {
 	IsOwner bool `json:"is_owner"`
 }
 
-// CreateProjectRequest is the request for creating a project
-type CreateProjectRequest struct {
+// CreateTagRequest is the request for creating a tag
+type CreateTagRequest struct {
 	RoomName string `json:"room_name"`
 	Name     string `json:"name"`
 }
 
-// UpdateProjectRequest is the request for updating a project
-type UpdateProjectRequest struct {
+// UpdateTagRequest is the request for updating a tag
+type UpdateTagRequest struct {
 	Name string `json:"name"`
 }
 
@@ -177,14 +177,14 @@ type CreateTaskRequest struct {
 	RoomName  string `json:"room_name"`
 	ClientID  string `json:"client_id"`
 	Title     string `json:"title"`
-	ProjectID string `json:"project_id,omitempty"`
+	TagID     string `json:"tag_id,omitempty"`
 }
 
 // UpdateTaskRequest is the request for updating a task
 type UpdateTaskRequest struct {
-	Title     string `json:"title,omitempty"`
-	Status    string `json:"status,omitempty"`
-	ProjectID string `json:"project_id,omitempty"`
+	Title  string `json:"title,omitempty"`
+	Status string `json:"status,omitempty"`
+	TagID  string `json:"tag_id,omitempty"`
 }
 
 // CreateAnnouncementRequest is the request for creating an announcement
@@ -204,7 +204,7 @@ type SyncTaskItem struct {
 	ClientID  string `json:"client_id"`
 	Title     string `json:"title"`
 	Status    string `json:"status"`
-	ProjectID string `json:"project_id,omitempty"`
+	TagID     string `json:"tag_id,omitempty"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -222,19 +222,19 @@ type SyncTaskResult struct {
 
 // StatsResponse is the response for stats
 type StatsResponse struct {
-	Period         string        `json:"period"`
-	TotalPomodoros int           `json:"total_pomodoros"`
-	TotalDuration  int           `json:"total_duration"`
-	ByProject      []ProjectStat `json:"by_project,omitempty"`
-	ByDay          []DayStat     `json:"by_day,omitempty"`
+	Period         string     `json:"period"`
+	TotalPomodoros int        `json:"total_pomodoros"`
+	TotalDuration  int        `json:"total_duration"`
+	ByTag          []TagStat  `json:"by_tag,omitempty"`
+	ByDay          []DayStat  `json:"by_day,omitempty"`
 }
 
-// ProjectStat represents stats by project
-type ProjectStat struct {
-	ProjectID     string `json:"project_id"`
-	ProjectName   string `json:"project_name"`
-	PomodoroCount int    `json:"pomodoro_count"`
-	TotalDuration int    `json:"total_duration"`
+// TagStat represents stats by tag
+type TagStat struct {
+	TagID          string `json:"tag_id"`
+	TagName        string `json:"tag_name"`
+	PomodoroCount  int    `json:"pomodoro_count"`
+	TotalDuration  int    `json:"total_duration"`
 }
 
 // DayStat represents stats by day

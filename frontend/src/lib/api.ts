@@ -46,6 +46,38 @@ export interface UserInfo {
 	is_online: boolean;
 }
 
+export interface Tag {
+	id: string;
+	member_id: string;
+	room_id: string;
+	name: string;
+	created_at: string;
+}
+
+export interface Task {
+	id: string;
+	client_id?: string;
+	member_id: string;
+	room_id: string;
+	tag_id?: string;
+	title: string;
+	status: 'TODO' | 'WIP' | 'DONE';
+	created_at: string;
+	updated_at: string;
+	completed_at?: string;
+}
+
+export interface Announcement {
+	id: string;
+	title: string;
+	body: string;
+	sender?: {
+		id: string;
+		username: string;
+	};
+	created_at: string;
+}
+
 export interface PomodoroStatus {
 	phase: 'idle' | 'focusing' | 'paused' | 'following' | 'rest';
 	session_id?: string;
@@ -191,7 +223,7 @@ export const api = {
 	// Pomodoro
 	startPomodoro: async (data: {
 		room_name: string;
-		project_id?: string;
+		tag_id?: string;
 		task_id?: string;
 		planned_duration?: number;
 		rest_duration?: number;
@@ -253,6 +285,73 @@ export const api = {
 		return apiRequest('/status', {
 			method: 'DELETE',
 			body: JSON.stringify({ room_name: roomName }),
+		});
+	},
+
+	// Tags
+	getTags: async (): Promise<{ success: boolean; data: { tags: Tag[] } }> => {
+		return apiRequest('/tags');
+	},
+
+	createTag: async (data: { room_name: string; name: string }): Promise<{ success: boolean; data: Tag }> => {
+		return apiRequest('/tags', { method: 'POST', body: JSON.stringify(data) });
+	},
+
+	updateTag: async (id: string, data: { name: string }): Promise<{ success: boolean }> => {
+		return apiRequest(`/tags/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+	},
+
+	deleteTag: async (id: string): Promise<{ success: boolean }> => {
+		return apiRequest(`/tags/${id}`, { method: 'DELETE' });
+	},
+
+	// Tasks (WIP)
+	getTasks: async (status?: string): Promise<{ success: boolean; data: { tasks: Task[] } }> => {
+		const qs = status ? `?status=${status}` : '';
+		return apiRequest(`/tasks${qs}`);
+	},
+
+	createTask: async (data: {
+		room_name: string;
+		client_id: string;
+		title: string;
+		tag_id?: string;
+	}): Promise<{ success: boolean; data: Task }> => {
+		return apiRequest('/tasks', { method: 'POST', body: JSON.stringify(data) });
+	},
+
+	updateTask: async (id: string, data: {
+		title?: string;
+		status?: string;
+		tag_id?: string;
+	}): Promise<{ success: boolean }> => {
+		return apiRequest(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+	},
+
+	deleteTask: async (id: string): Promise<{ success: boolean }> => {
+		return apiRequest(`/tasks/${id}`, { method: 'DELETE' });
+	},
+
+	// Announcements
+	getAnnouncements: async (
+		roomName: string
+	): Promise<{ success: boolean; data: { announcements: Announcement[] } }> => {
+		return apiRequest(`/rooms/${encodeURIComponent(roomName)}/announcements`);
+	},
+
+	createAnnouncement: async (
+		roomName: string,
+		data: { title: string; body: string }
+	): Promise<{ success: boolean }> => {
+		return apiRequest(`/rooms/${encodeURIComponent(roomName)}/announcements`, {
+			method: 'POST',
+			body: JSON.stringify(data),
+		});
+	},
+
+	deleteAnnouncement: async (roomName: string, id: string): Promise<{ success: boolean }> => {
+		return apiRequest(`/rooms/${encodeURIComponent(roomName)}/announcements/${id}`, {
+			method: 'DELETE',
 		});
 	},
 

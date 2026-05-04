@@ -33,7 +33,7 @@ var (
 	ErrTokenInvalid         = errors.New("token_invalid")
 	ErrMustBePersistent     = errors.New("must_be_persistent_user")
 	ErrMustBeOwner          = errors.New("must_be_owner")
-	ErrProjectNotFound      = errors.New("project_not_found")
+	ErrTagNotFound          = errors.New("tag_not_found")
 	ErrTaskNotFound         = errors.New("task_not_found")
 )
 
@@ -689,7 +689,7 @@ func (s *Service) StartPomodoro(tokenValue string, req *models.StartPomodoroRequ
 		ID:                       uuid.New().String(),
 		MemberID:                 token.MemberID,
 		RoomID:                   token.RoomID,
-		ProjectID:                req.ProjectID,
+		TagID:                    req.TagID,
 		TaskID:                   req.TaskID,
 		PlannedDuration:          plannedDuration,
 		PlannedRestDuration:      restDuration,
@@ -1084,40 +1084,40 @@ func (s *Service) RefreshToken(tokenValue string) error {
 	return s.repo.UpdateTokenHeartbeat(token.ID)
 }
 
-// Project operations
+// Tag operations
 
-func (s *Service) GetProjects(memberID, roomID string) ([]*models.Project, error) {
-	return s.repo.GetProjectsByMemberAndRoom(memberID, roomID)
+func (s *Service) GetTags(memberID, roomID string) ([]*models.Tag, error) {
+	return s.repo.GetTagsByMemberAndRoom(memberID, roomID)
 }
 
-func (s *Service) CreateProject(memberID, roomID, name string) (*models.Project, error) {
-	project := &models.Project{
+func (s *Service) CreateTag(memberID, roomID, name string) (*models.Tag, error) {
+	tag := &models.Tag{
 		ID:        uuid.New().String(),
 		MemberID:  memberID,
 		RoomID:    roomID,
 		Name:      name,
 		CreatedAt: time.Now(),
 	}
-	if err := s.repo.CreateProject(project); err != nil {
+	if err := s.repo.CreateTag(tag); err != nil {
 		return nil, err
 	}
-	return project, nil
+	return tag, nil
 }
 
-func (s *Service) UpdateProject(projectID, memberID, name string) error {
-	project, err := s.repo.GetProjectByID(projectID)
-	if err != nil || project.MemberID != memberID {
-		return ErrProjectNotFound
+func (s *Service) UpdateTag(tagID, memberID, name string) error {
+	tag, err := s.repo.GetTagByID(tagID)
+	if err != nil || tag.MemberID != memberID {
+		return ErrTagNotFound
 	}
-	return s.repo.UpdateProject(projectID, name)
+	return s.repo.UpdateTag(tagID, name)
 }
 
-func (s *Service) DeleteProject(projectID, memberID string) error {
-	project, err := s.repo.GetProjectByID(projectID)
-	if err != nil || project.MemberID != memberID {
-		return ErrProjectNotFound
+func (s *Service) DeleteTag(tagID, memberID string) error {
+	tag, err := s.repo.GetTagByID(tagID)
+	if err != nil || tag.MemberID != memberID {
+		return ErrTagNotFound
 	}
-	return s.repo.DeleteProject(projectID)
+	return s.repo.DeleteTag(tagID)
 }
 
 // Task operations
@@ -1126,13 +1126,13 @@ func (s *Service) GetTasks(memberID, roomID, status string) ([]*models.Task, err
 	return s.repo.GetTasksByMemberAndRoom(memberID, roomID, status)
 }
 
-func (s *Service) CreateTask(memberID, roomID, clientID, title, projectID string) (*models.Task, error) {
+func (s *Service) CreateTask(memberID, roomID, clientID, title, tagID string) (*models.Task, error) {
 	task := &models.Task{
 		ID:        uuid.New().String(),
 		ClientID:  clientID,
 		MemberID:  memberID,
 		RoomID:    roomID,
-		ProjectID: projectID,
+		TagID:     tagID,
 		Title:     title,
 		Status:    "TODO",
 		CreatedAt: time.Now(),
@@ -1144,7 +1144,7 @@ func (s *Service) CreateTask(memberID, roomID, clientID, title, projectID string
 	return task, nil
 }
 
-func (s *Service) UpdateTask(taskID, memberID, title, status, projectID string) error {
+func (s *Service) UpdateTask(taskID, memberID, title, status, tagID string) error {
 	task, err := s.repo.GetTaskByID(taskID)
 	if err != nil || task.MemberID != memberID {
 		return ErrTaskNotFound
@@ -1154,7 +1154,7 @@ func (s *Service) UpdateTask(taskID, memberID, title, status, projectID string) 
 		now := time.Now()
 		completedAt = &now
 	}
-	return s.repo.UpdateTask(taskID, title, status, projectID, completedAt)
+	return s.repo.UpdateTask(taskID, title, status, tagID, completedAt)
 }
 
 func (s *Service) DeleteTask(taskID, memberID string) error {
@@ -1174,7 +1174,7 @@ func (s *Service) SyncTasks(memberID, roomID string, tasks []models.SyncTaskItem
 			ClientID:  task.ClientID,
 			MemberID:  memberID,
 			RoomID:    roomID,
-			ProjectID: task.ProjectID,
+			TagID:     task.TagID,
 			Title:     task.Title,
 			Status:    task.Status,
 			CreatedAt: createdAt,
@@ -1219,6 +1219,22 @@ func (s *Service) GetAnnouncements(roomName string, limit int) ([]*models.Announ
 		return nil, ErrRoomNotFound
 	}
 	return s.repo.GetAnnouncementsByRoomID(room.ID, limit)
+}
+
+func (s *Service) DeleteAnnouncement(announcementID, memberID string) error {
+	a, err := s.repo.GetAnnouncementByID(announcementID)
+	if err != nil {
+		return errors.New("announcement_not_found")
+	}
+	// Only the sender or room owner can delete
+	if a.SenderID != memberID {
+		// Check if member is room owner
+		member, err := s.repo.GetMemberByID(memberID)
+		if err != nil || !member.IsOwner {
+			return ErrNotRoomOwner
+		}
+	}
+	return s.repo.DeleteAnnouncement(announcementID)
 }
 
 // Helper functions

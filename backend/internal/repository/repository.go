@@ -196,81 +196,81 @@ func (r *Repository) scanToken(row *sql.Row) (*models.RoomToken, error) {
 	return token, nil
 }
 
-// Project operations
+// Tag operations
 
-func (r *Repository) CreateProject(project *models.Project) error {
-	query := `INSERT INTO projects (id, member_id, room_id, name, created_at) VALUES (?, ?, ?, ?, ?)`
-	_, err := r.db.Exec(query, project.ID, project.MemberID, project.RoomID, project.Name, project.CreatedAt)
+func (r *Repository) CreateTag(tag *models.Tag) error {
+	query := `INSERT INTO tags (id, member_id, room_id, name, created_at) VALUES (?, ?, ?, ?, ?)`
+	_, err := r.db.Exec(query, tag.ID, tag.MemberID, tag.RoomID, tag.Name, tag.CreatedAt)
 	return err
 }
 
-func (r *Repository) GetProjectByID(id string) (*models.Project, error) {
-	query := `SELECT id, member_id, room_id, name, created_at FROM projects WHERE id = ?`
+func (r *Repository) GetTagByID(id string) (*models.Tag, error) {
+	query := `SELECT id, member_id, room_id, name, created_at FROM tags WHERE id = ?`
 	row := r.db.QueryRow(query, id)
-	project := &models.Project{}
-	err := row.Scan(&project.ID, &project.MemberID, &project.RoomID, &project.Name, &project.CreatedAt)
+	tag := &models.Tag{}
+	err := row.Scan(&tag.ID, &tag.MemberID, &tag.RoomID, &tag.Name, &tag.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
-	return project, nil
+	return tag, nil
 }
 
-func (r *Repository) GetProjectsByMemberID(memberID string) ([]*models.Project, error) {
-	query := `SELECT id, member_id, room_id, name, created_at FROM projects WHERE member_id = ?`
-	return r.scanProjects(query, memberID)
+func (r *Repository) GetTagsByMemberID(memberID string) ([]*models.Tag, error) {
+	query := `SELECT id, member_id, room_id, name, created_at FROM tags WHERE member_id = ?`
+	return r.scanTags(query, memberID)
 }
 
-func (r *Repository) GetProjectsByMemberAndRoom(memberID, roomID string) ([]*models.Project, error) {
-	query := `SELECT id, member_id, room_id, name, created_at FROM projects WHERE member_id = ? AND room_id = ?`
-	return r.scanProjects(query, memberID, roomID)
+func (r *Repository) GetTagsByMemberAndRoom(memberID, roomID string) ([]*models.Tag, error) {
+	query := `SELECT id, member_id, room_id, name, created_at FROM tags WHERE member_id = ? AND room_id = ?`
+	return r.scanTags(query, memberID, roomID)
 }
 
-func (r *Repository) UpdateProject(projectID, name string) error {
-	query := `UPDATE projects SET name = ? WHERE id = ?`
-	_, err := r.db.Exec(query, name, projectID)
+func (r *Repository) UpdateTag(tagID, name string) error {
+	query := `UPDATE tags SET name = ? WHERE id = ?`
+	_, err := r.db.Exec(query, name, tagID)
 	return err
 }
 
-func (r *Repository) DeleteProject(projectID string) error {
-	query := `DELETE FROM projects WHERE id = ?`
-	_, err := r.db.Exec(query, projectID)
+func (r *Repository) DeleteTag(tagID string) error {
+	query := `DELETE FROM tags WHERE id = ?`
+	_, err := r.db.Exec(query, tagID)
 	return err
 }
 
-func (r *Repository) scanProjects(query string, args ...interface{}) ([]*models.Project, error) {
+func (r *Repository) scanTags(query string, args ...interface{}) ([]*models.Tag, error) {
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var projects []*models.Project
+	var tags []*models.Tag
 	for rows.Next() {
-		project := &models.Project{}
-		err := rows.Scan(&project.ID, &project.MemberID, &project.RoomID, &project.Name, &project.CreatedAt)
+		tag := &models.Tag{}
+		err := rows.Scan(&tag.ID, &tag.MemberID, &tag.RoomID, &tag.Name, &tag.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
-		projects = append(projects, project)
+		tags = append(tags, tag)
 	}
-	return projects, nil
+	return tags, nil
 }
 
 // Task operations
 
 func (r *Repository) CreateTask(task *models.Task) error {
-	query := `INSERT INTO tasks (id, client_id, member_id, room_id, project_id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err := r.db.Exec(query, task.ID, task.ClientID, task.MemberID, task.RoomID, task.ProjectID, task.Title, task.Status, task.CreatedAt, task.UpdatedAt)
+	query := `INSERT INTO tasks (id, client_id, member_id, room_id, tag_id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := r.db.Exec(query, task.ID, task.ClientID, task.MemberID, task.RoomID, task.TagID, task.Title, task.Status, task.CreatedAt, task.UpdatedAt)
 	return err
 }
 
 func (r *Repository) GetTaskByID(id string) (*models.Task, error) {
-	query := `SELECT id, client_id, member_id, room_id, project_id, title, status, created_at, updated_at, completed_at FROM tasks WHERE id = ?`
+	query := `SELECT id, client_id, member_id, room_id, tag_id, title, status, created_at, updated_at, completed_at FROM tasks WHERE id = ?`
 	return r.scanTask(query, id)
 }
 
 func (r *Repository) GetTasksByMemberAndRoom(memberID, roomID string, status string) ([]*models.Task, error) {
-	query := `SELECT id, client_id, member_id, room_id, project_id, title, status, created_at, updated_at, completed_at FROM tasks WHERE member_id = ? AND room_id = ?`
+	query := `SELECT id, client_id, member_id, room_id, tag_id, title, status, created_at, updated_at, completed_at FROM tasks WHERE member_id = ? AND room_id = ?`
 	args := []interface{}{memberID, roomID}
 	if status != "" {
 		query += ` AND status = ?`
@@ -279,9 +279,9 @@ func (r *Repository) GetTasksByMemberAndRoom(memberID, roomID string, status str
 	return r.scanTasks(query, args...)
 }
 
-func (r *Repository) UpdateTask(taskID string, title, status, projectID string, completedAt *time.Time) error {
-	query := `UPDATE tasks SET title = COALESCE(NULLIF(?, ''), title), status = COALESCE(NULLIF(?, ''), status), project_id = ?, updated_at = ?`
-	args := []interface{}{title, status, projectID, time.Now()}
+func (r *Repository) UpdateTask(taskID string, title, status, tagID string, completedAt *time.Time) error {
+	query := `UPDATE tasks SET title = COALESCE(NULLIF(?, ''), title), status = COALESCE(NULLIF(?, ''), status), tag_id = ?, updated_at = ?`
+	args := []interface{}{title, status, tagID, time.Now()}
 	if completedAt != nil {
 		query += `, completed_at = ?`
 		args = append(args, *completedAt)
@@ -301,14 +301,14 @@ func (r *Repository) DeleteTask(taskID string) error {
 func (r *Repository) scanTask(query string, args ...interface{}) (*models.Task, error) {
 	row := r.db.QueryRow(query, args...)
 	task := &models.Task{}
-	var projectID sql.NullString
+	var tagID sql.NullString
 	var completedAt sql.NullTime
-	err := row.Scan(&task.ID, &task.ClientID, &task.MemberID, &task.RoomID, &projectID, &task.Title, &task.Status, &task.CreatedAt, &task.UpdatedAt, &completedAt)
+	err := row.Scan(&task.ID, &task.ClientID, &task.MemberID, &task.RoomID, &tagID, &task.Title, &task.Status, &task.CreatedAt, &task.UpdatedAt, &completedAt)
 	if err != nil {
 		return nil, err
 	}
-	if projectID.Valid {
-		task.ProjectID = projectID.String
+	if tagID.Valid {
+		task.TagID = tagID.String
 	}
 	if completedAt.Valid {
 		task.CompletedAt = &completedAt.Time
@@ -326,14 +326,14 @@ func (r *Repository) scanTasks(query string, args ...interface{}) ([]*models.Tas
 	var tasks []*models.Task
 	for rows.Next() {
 		task := &models.Task{}
-		var projectID sql.NullString
+		var tagID sql.NullString
 		var completedAt sql.NullTime
-		err := rows.Scan(&task.ID, &task.ClientID, &task.MemberID, &task.RoomID, &projectID, &task.Title, &task.Status, &task.CreatedAt, &task.UpdatedAt, &completedAt)
+		err := rows.Scan(&task.ID, &task.ClientID, &task.MemberID, &task.RoomID, &tagID, &task.Title, &task.Status, &task.CreatedAt, &task.UpdatedAt, &completedAt)
 		if err != nil {
 			return nil, err
 		}
-		if projectID.Valid {
-			task.ProjectID = projectID.String
+		if tagID.Valid {
+			task.TagID = tagID.String
 		}
 		if completedAt.Valid {
 			task.CompletedAt = &completedAt.Time
@@ -346,13 +346,13 @@ func (r *Repository) scanTasks(query string, args ...interface{}) ([]*models.Tas
 // PomodoroSession operations
 
 func (r *Repository) CreatePomodoroSession(session *models.PomodoroSession) error {
-	query := `INSERT INTO pomodoro_sessions (id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err := r.db.Exec(query, session.ID, session.MemberID, session.RoomID, session.ProjectID, session.TaskID, session.Duration, session.PlannedDuration, boolToInt(session.IsFollowed), session.LeaderID, session.StartedAt, session.EndedAt, session.PausedAt, session.RestDuration, boolToInt(session.IsLongBreak), session.PlannedRestDuration, session.PlannedLongBreakDuration, session.SessionsBeforeLongBreak, session.SessionIndex)
+	query := `INSERT INTO pomodoro_sessions (id, member_id, room_id, tag_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := r.db.Exec(query, session.ID, session.MemberID, session.RoomID, session.TagID, session.TaskID, session.Duration, session.PlannedDuration, boolToInt(session.IsFollowed), session.LeaderID, session.StartedAt, session.EndedAt, session.PausedAt, session.RestDuration, boolToInt(session.IsLongBreak), session.PlannedRestDuration, session.PlannedLongBreakDuration, session.SessionsBeforeLongBreak, session.SessionIndex)
 	return err
 }
 
 func (r *Repository) GetActiveSessionByMemberID(memberID string) (*models.PomodoroSession, error) {
-	query := `SELECT id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? AND ended_at IS NULL`
+	query := `SELECT id, member_id, room_id, tag_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? AND ended_at IS NULL`
 	row := r.db.QueryRow(query, memberID)
 	return r.scanPomodoroSession(row)
 }
@@ -399,7 +399,7 @@ func (r *Repository) ResumeSession(sessionID string, pausedMillis int) error {
 
 // GetLatestSessionByMemberID returns the most recent session (active or completed)
 func (r *Repository) GetLatestSessionByMemberID(memberID string) (*models.PomodoroSession, error) {
-	query := `SELECT id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? ORDER BY started_at DESC LIMIT 1`
+	query := `SELECT id, member_id, room_id, tag_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? ORDER BY started_at DESC LIMIT 1`
 	row := r.db.QueryRow(query, memberID)
 	return r.scanPomodoroSession(row)
 }
@@ -407,7 +407,7 @@ func (r *Repository) GetLatestSessionByMemberID(memberID string) (*models.Pomodo
 func (r *Repository) GetTodaySessionsByMemberID(memberID string, date time.Time) ([]*models.PomodoroSession, error) {
 	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	endOfDay := startOfDay.Add(24 * time.Hour)
-	query := `SELECT id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? AND started_at >= ? AND started_at < ? AND ended_at IS NOT NULL`
+	query := `SELECT id, member_id, room_id, tag_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? AND started_at >= ? AND started_at < ? AND ended_at IS NOT NULL`
 	rows, err := r.db.Query(query, memberID, startOfDay, endOfDay)
 	if err != nil {
 		return nil, err
@@ -417,17 +417,17 @@ func (r *Repository) GetTodaySessionsByMemberID(memberID string, date time.Time)
 	var sessions []*models.PomodoroSession
 	for rows.Next() {
 		session := &models.PomodoroSession{}
-		var projectID, taskID, leaderID sql.NullString
+		var tagID, taskID, leaderID sql.NullString
 		var endedAt, pausedAt sql.NullTime
 		var isFollowed, isLongBreak int
-		err := rows.Scan(&session.ID, &session.MemberID, &session.RoomID, &projectID, &taskID, &session.Duration, &session.PlannedDuration, &isFollowed, &leaderID, &session.StartedAt, &endedAt, &pausedAt, &session.RestDuration, &isLongBreak, &session.PlannedRestDuration, &session.PlannedLongBreakDuration, &session.SessionsBeforeLongBreak, &session.SessionIndex)
+		err := rows.Scan(&session.ID, &session.MemberID, &session.RoomID, &tagID, &taskID, &session.Duration, &session.PlannedDuration, &isFollowed, &leaderID, &session.StartedAt, &endedAt, &pausedAt, &session.RestDuration, &isLongBreak, &session.PlannedRestDuration, &session.PlannedLongBreakDuration, &session.SessionsBeforeLongBreak, &session.SessionIndex)
 		if err != nil {
 			return nil, err
 		}
 		session.IsFollowed = isFollowed == 1
 		session.IsLongBreak = isLongBreak == 1
-		if projectID.Valid {
-			session.ProjectID = projectID.String
+		if tagID.Valid {
+			session.TagID = tagID.String
 		}
 		if taskID.Valid {
 			session.TaskID = taskID.String
@@ -448,17 +448,17 @@ func (r *Repository) GetTodaySessionsByMemberID(memberID string, date time.Time)
 
 func (r *Repository) scanPomodoroSession(row *sql.Row) (*models.PomodoroSession, error) {
 	session := &models.PomodoroSession{}
-	var projectID, taskID, leaderID sql.NullString
+	var tagID, taskID, leaderID sql.NullString
 	var endedAt, pausedAt sql.NullTime
 	var isFollowed, isLongBreak int
-	err := row.Scan(&session.ID, &session.MemberID, &session.RoomID, &projectID, &taskID, &session.Duration, &session.PlannedDuration, &isFollowed, &leaderID, &session.StartedAt, &endedAt, &pausedAt, &session.RestDuration, &isLongBreak, &session.PlannedRestDuration, &session.PlannedLongBreakDuration, &session.SessionsBeforeLongBreak, &session.SessionIndex)
+	err := row.Scan(&session.ID, &session.MemberID, &session.RoomID, &tagID, &taskID, &session.Duration, &session.PlannedDuration, &isFollowed, &leaderID, &session.StartedAt, &endedAt, &pausedAt, &session.RestDuration, &isLongBreak, &session.PlannedRestDuration, &session.PlannedLongBreakDuration, &session.SessionsBeforeLongBreak, &session.SessionIndex)
 	if err != nil {
 		return nil, err
 	}
 	session.IsFollowed = isFollowed == 1
 	session.IsLongBreak = isLongBreak == 1
-	if projectID.Valid {
-		session.ProjectID = projectID.String
+	if tagID.Valid {
+		session.TagID = tagID.String
 	}
 	if taskID.Valid {
 		session.TaskID = taskID.String
@@ -546,6 +546,23 @@ func (r *Repository) GetAnnouncementsByRoomID(roomID string, limit int) ([]*mode
 		announcements = append(announcements, a)
 	}
 	return announcements, nil
+}
+
+func (r *Repository) GetAnnouncementByID(id string) (*models.Announcement, error) {
+	query := `SELECT id, room_id, sender_id, title, body, created_at FROM announcements WHERE id = ?`
+	row := r.db.QueryRow(query, id)
+	a := &models.Announcement{}
+	err := row.Scan(&a.ID, &a.RoomID, &a.SenderID, &a.Title, &a.Body, &a.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+func (r *Repository) DeleteAnnouncement(id string) error {
+	query := `DELETE FROM announcements WHERE id = ?`
+	_, err := r.db.Exec(query, id)
+	return err
 }
 
 // Stats operations

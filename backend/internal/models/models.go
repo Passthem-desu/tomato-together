@@ -34,8 +34,8 @@ type RoomToken struct {
 	LastHeartbeat time.Time `json:"last_heartbeat"`
 }
 
-// Project represents a project
-type Project struct {
+// Tag represents a tag (category label for tasks and pomodoros)
+type Tag struct {
 	ID        string    `json:"id"`
 	MemberID  string    `json:"member_id"`
 	RoomID    string    `json:"room_id"`
@@ -49,7 +49,7 @@ type Task struct {
 	ClientID    string     `json:"client_id"`
 	MemberID    string     `json:"member_id"`
 	RoomID      string     `json:"room_id"`
-	ProjectID   string     `json:"project_id"`
+	TagID       string     `json:"tag_id"`
 	Title       string     `json:"title"`
 	Status      string     `json:"status"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -62,7 +62,7 @@ type PomodoroSession struct {
 	ID                       string     `json:"id"`
 	MemberID                 string     `json:"member_id"`
 	RoomID                   string     `json:"room_id"`
-	ProjectID                string     `json:"project_id"`
+	TagID                    string     `json:"tag_id"`
 	TaskID                   string     `json:"task_id"`
 	Duration                 int        `json:"duration"`
 	PlannedDuration          int        `json:"planned_duration"`

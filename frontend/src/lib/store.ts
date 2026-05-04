@@ -13,6 +13,9 @@ export const isLoading = writable(false);
 export const error = writable<string | null>(null);
 export const sseConnected = writable(true);
 
+// Last SSE announcement (emitted to trigger UI updates)
+export const lastAnnouncement = writable<{ title: string; body: string } | null>(null);
+
 // Derived stores
 export const isAuthenticated = derived(currentMember, ($member) => !!$member);
 export const isOwner = derived(currentMember, ($member) => $member?.is_owner ?? false);
@@ -89,6 +92,11 @@ export function connectSSE() {
 		logout();
 	});
 
+	// Handle announcements
+	const unsubAnnouncement = sseClient.on('announcement', (data: any) => {
+		lastAnnouncement.set({ title: data.title || '', body: data.body || '' });
+	});
+
 	sseUnsubscribers = [
 		unsubTick,
 		unsubJoined,
@@ -100,6 +108,7 @@ export function connectSSE() {
 		unsubStatus,
 		unsubPhase,
 		unsubTokenExpired,
+		unsubAnnouncement,
 	];
 }
 
@@ -337,6 +346,8 @@ export async function startPomodoro(options?: {
 	long_break_duration?: number;
 	sessions_before_long_break?: number;
 	session_index?: number;
+	tag_id?: string;
+	task_id?: string;
 }) {
 	isLoading.set(true);
 	error.set(null);

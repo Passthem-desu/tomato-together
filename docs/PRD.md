@@ -138,13 +138,14 @@ tomatogether/
 > - 匿名用户：同一设备 + 同 username = 同会话
 > - 持久化用户：每个设备独立 RoomToken，支持多设备同时在线
 
-### 3.4 项目 (Project)
+### 3.4 标签 (Tag)
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | UUID | 主键 |
 | `member_id` | UUID | 所属成员 ID |
-| `name` | string | 项目名 |
+| `room_id` | UUID | 房间 ID |
+| `name` | string | 标签名 |
 | `created_at` | datetime | 创建时间 |
 
 ### 3.5 WIP 待办 (Task)
@@ -154,7 +155,7 @@ tomatogether/
 | `id` | UUID | 主键（服务端 UUID） |
 | `client_id` | UUID | 客户端原始 UUID（用于同步映射） |
 | `member_id` | UUID | 所属成员 ID |
-| `project_id` | UUID | 关联项目 ID（可选） |
+| `tag_id` | UUID | 关联标签 ID（可选） |
 | `title` | string | 标题 |
 | `status` | enum | `TODO` / `WIP` / `DONE` |
 | `created_at` | datetime | 创建时间 |
@@ -192,7 +193,7 @@ tomatogether/
 | `id` | UUID | 主键 |
 | `member_id` | UUID | 成员 ID |
 | `room_id` | UUID | 所在房间 ID |
-| `project_id` | UUID | 关联项目 ID（可选） |
+| `tag_id` | UUID | 关联标签 ID（可选） |
 | `task_id` | UUID | 关联 WIP ID（可选） |
 | `duration` | int | 实际专注时长（秒），结束时填入 |
 | `planned_duration` | int | 计划专注时长（秒，默认 1500） |
@@ -390,15 +391,15 @@ tomatogether/
 - **Client_id 规则**：客户端生成 UUID v4，存储到云端
 - **冲突处理**：以 `created_at` 最早的服务端记录为准
 
-### 5.5 项目系统（L2）
+### 5.5 标签系统（L2）
 
 #### 5.5.1 CRUD 操作
 | 操作 | 说明 |
 |------|------|
-| 创建 | 项目名 |
+| 创建 | 标签名 |
 | 读取 | 仅自己可见 |
-| 更新 | 修改项目名 |
-| 删除 | 项目下的 WIP 变为「杂项工作」 |
+| 更新 | 修改标签名 |
+| 删除 | 标签下的 WIP 变为「无标签」 |
 
 ---
 
@@ -416,10 +417,10 @@ tomatogether/
 - [ ] 用户状态
 - [ ] 基础 UI
 
-### Phase 2: WIP 和项目
-**目标**：待办管理和项目分类
+### Phase 2: WIP 和标签
+**目标**：待办管理和标签分类
 
-- [ ] 项目 CRUD
+- [ ] 标签 CRUD
 - [ ] WIP CRUD + 状态流转
 - [ ] WIP 面板 UI
 - [ ] 公告功能

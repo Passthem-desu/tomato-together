@@ -48,6 +48,14 @@
 	--color-border: light-dark(oklch(88% 0.01 270), oklch(35% 0.02 270));
 	--color-border-subtle: light-dark(oklch(93% 0.01 270), oklch(30% 0.02 270));
 
+	/* Convenience aliases for component development */
+	--color-accent: var(--color-brand);
+	--color-accent-bg: var(--color-brand-subtle);
+	--color-text: var(--color-fg-0);
+	--color-text-muted: var(--color-fg-muted);
+	--color-danger: var(--color-error);
+	--color-danger-bg: var(--color-error-subtle);
+
 	/* ============================================
      Layout & Spacing
      ============================================ */

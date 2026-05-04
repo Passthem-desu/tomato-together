@@ -143,6 +143,36 @@ const translations: Record<Locale, Record<string, string>> = {
 		focusing: '专注中',
 		resting: '休息中',
 		owner: '房主',
+
+		// Tags
+		tags: '标签',
+		no_tags: '暂无标签',
+		add_tag: '添加标签',
+		new_tag_placeholder: '标签名称',
+		delete_tag_confirm: '确定删除该标签吗？关联的 WIP 将取消关联。',
+
+		// WIP (Tasks)
+		wip: '待办',
+		no_wip: '暂无待办',
+		add_wip: '添加待办',
+		new_wip_placeholder: '待办标题',
+		all: '全部',
+		todo: '待办',
+		done: '已完成',
+		wip_status: '进行中',
+		no_tag: '无标签',
+
+		// Announcements
+		announcements: '公告',
+		no_announcements: '暂无公告',
+		send_announcement: '发送公告',
+		announcement_title: '公告标题',
+		announcement_body: '公告内容',
+		announcement_title_placeholder: '输入标题',
+		announcement_body_placeholder: '输入内容',
+		send: '发送',
+		delete: '删除',
+		drag_to_reorder: '拖拽排序',
 	},
 
 	'zh-hant': {
@@ -254,6 +284,37 @@ const translations: Record<Locale, Record<string, string>> = {
 		focusing: '專注中',
 		resting: '休息中',
 		owner: '房主',
+
+		// Tags
+		tags: '標籤',
+		no_tags: '暫無標籤',
+		add_tag: '新增標籤',
+		new_tag_placeholder: '標籤名稱',
+		delete_tag_confirm: '確定刪除該標籤嗎？關聯的 WIP 將取消關聯。',
+
+		// WIP (Tasks)
+		wip: '待辦',
+		no_wip: '暫無待辦',
+		add_wip: '新增待辦',
+		new_wip_placeholder: '待辦標題',
+		all: '全部',
+		todo: '待辦',
+		done: '已完成',
+		wip_status: '進行中',
+		no_tag: '無標籤',
+
+		// Announcements
+		announcements: '公告',
+		no_announcements: '暫無公告',
+		send_announcement: '發送公告',
+		announcement_title: '公告標題',
+		announcement_body: '公告內容',
+		announcement_title_placeholder: '輸入標題',
+		announcement_body_placeholder: '輸入內容',
+		send: '發送',
+		delete: '刪除',
+		drag_to_reorder: '拖曳排序',
+
 		custom_sounds: '自訂音效',
 		custom_sounds_hint: '可添加 URL 音訊或上傳本地檔案（存於瀏覽器）',
 		sound_label_placeholder: '名稱',
@@ -381,6 +442,36 @@ const translations: Record<Locale, Record<string, string>> = {
 		focusing: 'Focusing',
 		resting: 'Resting',
 		owner: 'Owner',
+
+		// Tags
+		tags: 'Tags',
+		no_tags: 'No tags',
+		add_tag: 'Add Tag',
+		new_tag_placeholder: 'Tag name',
+		delete_tag_confirm: 'Delete this tag? Linked tasks will be unlinked.',
+
+		// WIP (Tasks)
+		wip: 'Tasks',
+		no_wip: 'No tasks',
+		add_wip: 'Add Task',
+		new_wip_placeholder: 'Task title',
+		all: 'All',
+		todo: 'To Do',
+		done: 'Done',
+		wip_status: 'In Progress',
+		no_tag: 'No tag',
+
+		// Announcements
+		announcements: 'Announcements',
+		no_announcements: 'No announcements',
+		send_announcement: 'Send Announcement',
+		announcement_title: 'Title',
+		announcement_body: 'Body',
+		announcement_title_placeholder: 'Enter title',
+		announcement_body_placeholder: 'Enter content',
+		send: 'Send',
+		delete: 'Delete',
+		drag_to_reorder: 'Drag to reorder',
 	},
 
 	ja: {
@@ -500,6 +591,36 @@ const translations: Record<Locale, Record<string, string>> = {
 		focusing: '集中中',
 		resting: '休憩中',
 		owner: 'オーナー',
+
+		// Tags
+		tags: 'タグ',
+		no_tags: 'タグなし',
+		add_tag: 'タグを追加',
+		new_tag_placeholder: 'タグ名',
+		delete_tag_confirm: 'このタグを削除しますか？関連するタスクのリンクが解除されます。',
+
+		// WIP (Tasks)
+		wip: 'タスク',
+		no_wip: 'タスクなし',
+		add_wip: 'タスクを追加',
+		new_wip_placeholder: 'タスク名',
+		all: 'すべて',
+		todo: '未着手',
+		done: '完了',
+		wip_status: '進行中',
+		no_tag: 'タグなし',
+
+		// Announcements
+		announcements: 'お知らせ',
+		no_announcements: 'お知らせなし',
+		send_announcement: 'お知らせを送信',
+		announcement_title: 'タイトル',
+		announcement_body: '本文',
+		announcement_title_placeholder: 'タイトルを入力',
+		announcement_body_placeholder: '内容を入力',
+		send: '送信',
+		delete: '削除',
+		drag_to_reorder: 'ドラッグで並べ替え',
 	},
 
 	ko: {
@@ -619,6 +740,36 @@ const translations: Record<Locale, Record<string, string>> = {
 		focusing: '집중 중',
 		resting: '휴식 중',
 		owner: '방장',
+
+		// Tags
+		tags: '태그',
+		no_tags: '태그 없음',
+		add_tag: '태그 추가',
+		new_tag_placeholder: '태그 이름',
+		delete_tag_confirm: '이 태그를 삭제하시겠습니까? 연결된 작업이 해제됩니다.',
+
+		// WIP (Tasks)
+		wip: '할 일',
+		no_wip: '할 일 없음',
+		add_wip: '할 일 추가',
+		new_wip_placeholder: '할 일 제목',
+		all: '전체',
+		todo: '할 일',
+		done: '완료',
+		wip_status: '진행 중',
+		no_tag: '태그 없음',
+
+		// Announcements
+		announcements: '공지',
+		no_announcements: '공지 없음',
+		send_announcement: '공지 보내기',
+		announcement_title: '제목',
+		announcement_body: '내용',
+		announcement_title_placeholder: '제목 입력',
+		announcement_body_placeholder: '내용 입력',
+		send: '보내기',
+		delete: '삭제',
+		drag_to_reorder: '드래그하여 정렬',
 	},
 
 	vi: {
@@ -738,6 +889,36 @@ const translations: Record<Locale, Record<string, string>> = {
 		focusing: 'Đang tập trung',
 		resting: 'Đang nghỉ',
 		owner: 'Chủ phòng',
+
+		// Tags
+		tags: 'Thẻ',
+		no_tags: 'Không có thẻ',
+		add_tag: 'Thêm thẻ',
+		new_tag_placeholder: 'Tên thẻ',
+		delete_tag_confirm: 'Xóa thẻ này? Các task liên kết sẽ bị hủy liên kết.',
+
+		// WIP (Tasks)
+		wip: 'Việc cần làm',
+		no_wip: 'Không có việc',
+		add_wip: 'Thêm việc',
+		new_wip_placeholder: 'Tiêu đề',
+		all: 'Tất cả',
+		todo: 'Cần làm',
+		done: 'Đã xong',
+		wip_status: 'Đang làm',
+		no_tag: 'Không thẻ',
+
+		// Announcements
+		announcements: 'Thông báo',
+		no_announcements: 'Không có thông báo',
+		send_announcement: 'Gửi thông báo',
+		announcement_title: 'Tiêu đề',
+		announcement_body: 'Nội dung',
+		announcement_title_placeholder: 'Nhập tiêu đề',
+		announcement_body_placeholder: 'Nhập nội dung',
+		send: 'Gửi',
+		delete: 'Xóa',
+		drag_to_reorder: 'Kéo để sắp xếp',
 	},
 };
 

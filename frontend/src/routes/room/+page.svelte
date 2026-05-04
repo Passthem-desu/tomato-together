@@ -8,6 +8,7 @@
 		pomodoroStatus,
 		isLoading,
 		error,
+		lastAnnouncement,
 		startPomodoro,
 		endPomodoro,
 		unfollowPomodoro,
@@ -24,6 +25,8 @@
 	import TimerCard from '$lib/components/TimerCard.svelte';
 	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
 	import UserList from '$lib/components/UserList.svelte';
+	import WipPanel from '$lib/components/WipPanel.svelte';
+	import AnnouncementPanel from '$lib/components/AnnouncementPanel.svelte';
 
 	const sound = new SoundManager();
 	const countdown = new PomodoroCountdown();
@@ -348,10 +351,20 @@
 					onsettings={() => (showSettings = true)}
 				/>
 			{/if}
+
+			<div class="wip-section">
+				<WipPanel />
+			</div>
 		</section>
 
 		<section class="users-panel">
 			<UserList users={$roomUsers} currentMemberId={$currentMember?.id || ''} />
+			<div class="ann-section">
+				<AnnouncementPanel
+					isOwner={$currentMember?.is_owner ?? false}
+					newAnnouncement={$lastAnnouncement}
+				/>
+			</div>
 		</section>
 	</div>
 </main>
@@ -359,8 +372,14 @@
 <style>
 	.room {
 		min-height: 100dvh;
-		padding: 1.5rem;
+		padding: 1.5rem 1.5rem 40vh;
 		background: var(--color-bg-0);
+	}
+	.wip-section {
+		margin-top: 1rem;
+	}
+	.ann-section {
+		margin-top: 1rem;
 	}
 	.room-content {
 		display: flex;

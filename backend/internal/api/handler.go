@@ -50,6 +50,7 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	authRouter.HandleFunc("/rooms/{name}/owners/{member_id}", h.SetRoomOwner).Methods(http.MethodPut)
 	authRouter.HandleFunc("/rooms/{name}/announcements", h.CreateAnnouncement).Methods(http.MethodPost)
 	authRouter.HandleFunc("/rooms/{name}/announcements", h.GetAnnouncements).Methods(http.MethodGet)
+	authRouter.HandleFunc("/rooms/{name}/announcements/{id}", h.DeleteAnnouncement).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/auth/me", h.GetMe).Methods(http.MethodGet)
 	authRouter.HandleFunc("/auth/upgrade", h.UpgradeToPersistent).Methods(http.MethodPost)
 	authRouter.HandleFunc("/pomodoro/start", h.StartPomodoro).Methods(http.MethodPost)
@@ -62,10 +63,10 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	authRouter.HandleFunc("/pomodoro/status", h.GetPomodoroStatus).Methods(http.MethodGet)
 	authRouter.HandleFunc("/status", h.UpdateStatus).Methods(http.MethodPut)
 	authRouter.HandleFunc("/status", h.DeleteStatus).Methods(http.MethodDelete)
-	authRouter.HandleFunc("/projects", h.GetProjects).Methods(http.MethodGet)
-	authRouter.HandleFunc("/projects", h.CreateProject).Methods(http.MethodPost)
-	authRouter.HandleFunc("/projects/{id}", h.UpdateProject).Methods(http.MethodPut)
-	authRouter.HandleFunc("/projects/{id}", h.DeleteProject).Methods(http.MethodDelete)
+	authRouter.HandleFunc("/tags", h.GetTags).Methods(http.MethodGet)
+	authRouter.HandleFunc("/tags", h.CreateTag).Methods(http.MethodPost)
+	authRouter.HandleFunc("/tags/{id}", h.UpdateTag).Methods(http.MethodPut)
+	authRouter.HandleFunc("/tags/{id}", h.DeleteTag).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/tasks", h.GetTasks).Methods(http.MethodGet)
 	authRouter.HandleFunc("/tasks", h.CreateTask).Methods(http.MethodPost)
 	authRouter.HandleFunc("/tasks/{id}", h.UpdateTask).Methods(http.MethodPut)
@@ -743,16 +744,16 @@ func (h *Handler) DeleteStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Project handlers
+// Tag handlers
 
-func (h *Handler) GetProjects(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetTags(w http.ResponseWriter, r *http.Request) {
 	token := GetTokenFromContext(r.Context())
 	if token == nil {
 		h.writeError(w, http.StatusUnauthorized, "token_invalid")
 		return
 	}
 
-	projects, err := h.svc.GetProjects(token.MemberID, token.RoomID)
+	tags, err := h.svc.GetTags(token.MemberID, token.RoomID)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error")
 		return
@@ -761,25 +762,25 @@ func (h *Handler) GetProjects(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data": map[string]interface{}{
-			"projects": projects,
+			"tags": tags,
 		},
 	})
 }
 
-func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateTag(w http.ResponseWriter, r *http.Request) {
 	token := GetTokenFromContext(r.Context())
 	if token == nil {
 		h.writeError(w, http.StatusUnauthorized, "token_invalid")
 		return
 	}
 
-	var req models.CreateProjectRequest
+	var req models.CreateTagRequest
 	if err := h.parseJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
-	project, err := h.svc.CreateProject(token.MemberID, token.RoomID, req.Name)
+	tag, err := h.svc.CreateTag(token.MemberID, token.RoomID, req.Name)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error")
 		return
@@ -787,11 +788,11 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 
 	h.writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"success": true,
-		"data":    project,
+		"data":    tag,
 	})
 }
 
-func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateTag(w http.ResponseWriter, r *http.Request) {
 	token := GetTokenFromContext(r.Context())
 	if token == nil {
 		h.writeError(w, http.StatusUnauthorized, "token_invalid")
@@ -799,15 +800,15 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vars := mux.Vars(r)
-	projectID := vars["id"]
+	tagID := vars["id"]
 
-	var req models.UpdateProjectRequest
+	var req models.UpdateTagRequest
 	if err := h.parseJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
-	if err := h.svc.UpdateProject(projectID, token.MemberID, req.Name); err != nil {
+	if err := h.svc.UpdateTag(tagID, token.MemberID, req.Name); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
@@ -815,13 +816,13 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data": map[string]interface{}{
-			"id":   projectID,
+			"id":   tagID,
 			"name": req.Name,
 		},
 	})
 }
 
-func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeleteTag(w http.ResponseWriter, r *http.Request) {
 	token := GetTokenFromContext(r.Context())
 	if token == nil {
 		h.writeError(w, http.StatusUnauthorized, "token_invalid")
@@ -829,9 +830,9 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vars := mux.Vars(r)
-	projectID := vars["id"]
+	tagID := vars["id"]
 
-	if err := h.svc.DeleteProject(projectID, token.MemberID); err != nil {
+	if err := h.svc.DeleteTag(tagID, token.MemberID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
@@ -839,7 +840,7 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data": map[string]string{
-			"message": "项目已删除",
+			"message": "标签已删除",
 		},
 	})
 }
@@ -880,7 +881,7 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.svc.CreateTask(token.MemberID, token.RoomID, req.ClientID, req.Title, req.ProjectID)
+	task, err := h.svc.CreateTask(token.MemberID, token.RoomID, req.ClientID, req.Title, req.TagID)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error")
 		return
@@ -908,7 +909,7 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.UpdateTask(taskID, token.MemberID, req.Title, req.Status, req.ProjectID); err != nil {
+	if err := h.svc.UpdateTask(taskID, token.MemberID, req.Title, req.Status, req.TagID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
@@ -932,7 +933,11 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	taskID := vars["id"]
 
 	if err := h.svc.DeleteTask(taskID, token.MemberID); err != nil {
-		h.writeError(w, http.StatusInternalServerError, "internal_error")
+		if err.Error() == "task_not_found" {
+			h.writeError(w, http.StatusNotFound, "task_not_found")
+		} else {
+			h.writeError(w, http.StatusInternalServerError, "internal_error")
+		}
 		return
 	}
 
@@ -1022,6 +1027,29 @@ func (h *Handler) GetAnnouncements(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"data": map[string]interface{}{
 			"announcements": announcements,
+		},
+	})
+}
+
+func (h *Handler) DeleteAnnouncement(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+
+	vars := mux.Vars(r)
+	announcementID := vars["id"]
+
+	if err := h.svc.DeleteAnnouncement(announcementID, token.MemberID); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]string{
+			"message": "公告已删除",
 		},
 	})
 }

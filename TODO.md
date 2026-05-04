@@ -50,14 +50,14 @@
 #### 状态系统
 - [x] 用户状态（emoji + message）
 
-### Phase 2: WIP 和项目（待实现）
-**目标**：待办管理和项目分类
+### Phase 2: WIP 和标签 ✅
+**目标**：待办管理和标签分类
 
-- [ ] 项目 CRUD（按房间隔离）
-- [ ] WIP CRUD + 状态流转
-- [ ] WIP 关联番茄
-- [ ] 公告功能
-- [ ] 浏览器通知
+- [x] ~~项目~~ → **标签** CRUD（按房间隔离，已重命名，迁移 000002）
+- [x] WIP CRUD + 状态流转
+- [x] WIP 关联番茄
+- [x] 公告功能
+- [x] 浏览器通知
 
 ### Phase 3: 云同步（待实现）
 **目标**：跨设备数据同步
@@ -82,6 +82,18 @@
 ---
 
 ## 🐛 Bug 修复
+
+### 进行中
+- [x] **Bug #21: Phase 2 组件颜色 token 在亮色模式不工作** — 在 app.css 添加 `--color-accent`/`--color-text`/`--color-danger` 等别名指向 `--color-brand`/`--color-fg-*`/`--color-error`
+- [x] **Bug #22: WipPanel/AnnouncementPanel 空状态误显示「加载中」** — 修正 loading 状态判断逻辑
+- [x] **Bug #23: 按钮形状错误** — `.btn-add`/`.btn-cancel` 改为 `border-radius: 50%` + 等宽高
+
+### 待改进
+- [x] **Improve #4: WIP 状态切换改用按钮式三态切换** — 替换 select 为带标签的按钮（待办/在做/完成），圆形切换
+- [x] **Improve #5: WIP 标题始终可编辑** — 使用内联 `<input>`，始终可编辑
+- [x] **Improve #6: WIP 支持排序** — 上移/下移按钮
+- [x] **Improve #7: 移除 WIP-番茄关联** — 删除 ▶ 播放按钮，清理 room page 中相关代码
+- [x] **Improve #8: 公告支持删除** — 后端新增 `DELETE /api/rooms/:name/announcements/:id` + 前端删除按钮（房主可删任意，发送者可删自己的）
 
 ### 已修复
 - [x] **Bug #1: 番茄钟倒计时不工作** - 计时器现在每秒递减
@@ -152,6 +164,7 @@
 | D-020 | **登录流程** | 分步骤引导用户完成登录（房间名 → 房间密码 → 用户名 → 用户密码） |
 | D-021 | **在线状态** | 基于心跳时间判断用户是否在线（2分钟超时视为离线） |
 | D-022 | **番茄状态机** | PomodoroSession 即状态机：ended_at IS NULL=活跃，paused_at=暂停，rest_duration>0=休息中 |
+| D-023 | 项目→标签 | 将“项目”重命名为“标签”，更符合轻量分类语义。SQLite 用 ALTER TABLE RENAME 安全迁移 |
 
 ### 历史设计决策（已废弃）
 

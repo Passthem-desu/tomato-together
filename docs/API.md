@@ -494,7 +494,7 @@ POST /api/pomodoro/start
 ```json
 {
   "room_name": "学习小组",
-  "project_id": "uuid-xxx（可选）",
+  "tag_id": "uuid-xxx（可选）",
   "task_id": "uuid-xxx（可选）",
   "planned_duration": 1500,
   "rest_duration": 300,
@@ -880,31 +880,27 @@ GET /api/rooms/:name/announcements
 
 ---
 
-## 8. 项目接口（L2 持久化用户）
+## 8. 标签接口（L2）
 
-### 8.1 获取项目列表
+### 8.1 获取标签列表
 
 ```
-GET /api/projects
+GET /api/tags
 ```
 
-**需要认证**: L2（持久化用户）
-
-**查询参数**:
-- `room_name`: 房间名（可选，用于筛选特定房间的项目）
+**需要认证**: L2
 
 **响应** (200):
 ```json
 {
   "success": true,
   "data": {
-    "projects": [
+    "tags": [
       {
         "id": "uuid-xxx",
-        "room_name": "学习小组",
+        "member_id": "uuid-yyy",
+        "room_id": "uuid-zzz",
         "name": "工作",
-        "pomodoro_count": 15,
-        "total_duration": 22500,
         "created_at": "2026-05-01T10:00:00Z"
       }
     ]
@@ -912,13 +908,13 @@ GET /api/projects
 }
 ```
 
-### 8.2 创建项目
+### 8.2 创建标签
 
 ```
-POST /api/projects
+POST /api/tags
 ```
 
-**需要认证**: L2（持久化用户）
+**需要认证**: L2
 
 **请求体**:
 ```json
@@ -934,20 +930,21 @@ POST /api/projects
   "success": true,
   "data": {
     "id": "uuid-xxx",
-    "room_name": "学习小组",
+    "member_id": "uuid-yyy",
+    "room_id": "uuid-zzz",
     "name": "学习新框架",
     "created_at": "2026-05-04T10:00:00Z"
   }
 }
 ```
 
-### 8.3 更新项目
+### 8.3 更新标签
 
 ```
-PUT /api/projects/:id
+PUT /api/tags/:id
 ```
 
-**需要认证**: L2（持久化用户，该项目所有者）
+**需要认证**: L2（该标签所有者）
 
 **请求体**:
 ```json
@@ -962,26 +959,25 @@ PUT /api/projects/:id
   "success": true,
   "data": {
     "id": "uuid-xxx",
-    "name": "学习 React",
-    "updated_at": "2026-05-04T10:30:00Z"
+    "name": "学习 React"
   }
 }
 ```
 
-### 8.4 删除项目
+### 8.4 删除标签
 
 ```
-DELETE /api/projects/:id
+DELETE /api/tags/:id
 ```
 
-**需要认证**: L2（持久化用户，该项目所有者）
+**需要认证**: L2（该标签所有者）
 
 **响应** (200):
 ```json
 {
   "success": true,
   "data": {
-    "message": "项目已删除"
+    "message": "标签已删除"
   }
 }
 ```
@@ -1027,8 +1023,8 @@ GET /api/tasks
         "client_id": "uuid-yyy",
         "title": "完成 PRD 文档",
         "status": "WIP",
-        "project_id": "uuid-zzz",
-        "project_name": "工作",
+        "tag_id": "uuid-zzz",
+        "tag_name": "工作",
         "created_at": "2026-05-04T09:00:00Z",
         "completed_at": null
       }
@@ -1051,7 +1047,7 @@ POST /api/tasks
   "room_name": "学习小组",
   "client_id": "uuid-yyy（客户端生成的 UUID）",
   "title": "完成 PRD 文档",
-  "project_id": "uuid-xxx（可选）"
+  "tag_id": "uuid-xxx（可选）"
 }
 ```
 
@@ -1064,7 +1060,7 @@ POST /api/tasks
     "client_id": "uuid-yyy",
     "title": "完成 PRD 文档",
     "status": "TODO",
-    "project_id": "uuid-xxx",
+    "tag_id": "uuid-xxx",
     "created_at": "2026-05-04T10:00:00Z"
   }
 }
@@ -1083,7 +1079,7 @@ PUT /api/tasks/:id
 {
   "title": "完成 PRD 文档（修订版）",
   "status": "DONE",
-  "project_id": "uuid-yyy"
+  "tag_id": "uuid-yyy"
 }
 ```
 
@@ -1101,7 +1097,7 @@ PUT /api/tasks/:id
     "client_id": "uuid-yyy",
     "title": "完成 PRD 文档（修订版）",
     "status": "DONE",
-    "project_id": "uuid-yyy",
+    "tag_id": "uuid-yyy",
     "completed_at": "2026-05-04T11:00:00Z"
   }
 }
@@ -1144,7 +1140,7 @@ POST /api/tasks/sync
       "client_id": "uuid-xxx",
       "title": "任务 A",
       "status": "WIP",
-      "project_id": "uuid-yyy",
+      "tag_id": "uuid-yyy",
       "created_at": "2026-05-04T09:00:00Z"
     }
   ]
@@ -1191,10 +1187,10 @@ GET /api/stats
     "period": "week",
     "total_pomodoros": 42,
     "total_duration": 63000,
-    "by_project": [
+    "by_tag": [
       {
-        "project_id": "uuid-xxx",
-        "project_name": "工作",
+        "tag_id": "uuid-xxx",
+        "tag_name": "工作",
         "pomodoro_count": 25,
         "total_duration": 37500
       }
@@ -1406,7 +1402,7 @@ GET /api/rooms/:name/sse
 | `room_not_found` | 404 | 房间不存在 |
 | `member_not_found` | 404 | 成员不存在 |
 | `task_not_found` | 404 | WIP 不存在 |
-| `project_not_found` | 404 | 项目不存在 |
+| `tag_not_found` | 404 | 标签不存在 |
 | `invalid_password` | 401 | 密码错误 |
 | `invalid_room_password` | 401 | 房间密码错误 |
 | `room_requires_password` | 403 | 房间需要密码 |
@@ -1423,6 +1419,7 @@ GET /api/rooms/:name/sse
 | `token_expired` | 401 | Token 已过期 |
 | `token_invalid` | 401 | Token 无效 |
 | `must_be_persistent_user` | 403 | 必须是持久化用户 |
+| `tag_not_found` | 404 | 标签不存在 |
 | `must_be_owner` | 403 | 必须是房主 |
 | `token_missing` | 401 | 未提供 Authorization header |
 | `invalid_request` | 400 | 请求体格式错误 |
@@ -1465,10 +1462,10 @@ GET /api/rooms/:name/sse
 | `/api/status` | PUT | L2 |
 | `/api/status` | DELETE | L2 |
 | **项目** |
-| `/api/projects` | GET | L2（持久化） |
-| `/api/projects` | POST | L2（持久化） |
-| `/api/projects/:id` | PUT | L2（持久化） |
-| `/api/projects/:id` | DELETE | L2（持久化） |
+| `/api/tags` | GET | L2 |
+| `/api/tags` | POST | L2 |
+| `/api/tags/:id` | PUT | L2 |
+| `/api/tags/:id` | DELETE | L2 |
 | **WIP** |
 | `/api/tasks` | GET | L2（持久化） |
 | `/api/tasks` | POST | L2（持久化） |
@@ -1487,8 +1484,8 @@ GET /api/rooms/:name/sse
 | `rooms` | id | name, password_hash, is_readonly |
 | `room_members` | id | room_id, username, password_hash, is_owner |
 | `room_tokens` | id | member_id, room_id, token, expires_at |
-| `projects` | id | member_id, room_id, name |
-| `tasks` | id | member_id, client_id, project_id, title, status |
+| `tags` | id | member_id, room_id, name |
+| `tasks` | id | member_id, client_id, tag_id, title, status |
 | `pomodoro_sessions` | id | member_id, room_id, leader_id |
 | `user_statuses` | id | member_id, room_id, emoji, message |
 | `announcements` | id | room_id, sender_id, title, body |
