@@ -6,7 +6,6 @@
   import { getMember, isAuthenticated, api } from '$lib/api';
   import { locale, t, getErrorMessage } from '$lib/i18n';
 
-  // Steps: room -> room_password -> username -> (optional user_password)
   let step = $state('room');
   let roomName = $state('');
   let roomPassword = $state('');
@@ -17,7 +16,6 @@
   let userIsPersistent = $state(false);
   let checkingUser = $state(false);
 
-  // Focus input when step changes
   $effect(() => {
     const _step = step;
     setTimeout(() => {
@@ -27,16 +25,13 @@
   });
 
   onMount(() => {
-    // Clear any previous error
     error.set(null);
 
-    // Check URL params for pre-filled room name
     const urlRoom = $page.url.searchParams.get('room');
     if (urlRoom) {
       roomName = urlRoom;
     }
 
-    // Check if already logged in
     if (isAuthenticated()) {
       const member = getMember();
       if (member) {
@@ -53,7 +48,6 @@
     error.set(null);
     
     try {
-      // Check if room exists and if it has password
       const roomInfo = await api.getRoomInfo(roomName);
       if (roomInfo.success && roomInfo.data) {
         if (roomInfo.data.has_password) {
@@ -73,17 +67,7 @@
 
   async function handleRoomPasswordSubmit() {
     if (!roomPassword.trim()) return;
-    
-    isLoading.set(true);
-    error.set(null);
-    
-    try {
-      // Verify room password by attempting to join (will fail if password wrong)
-      // Actually, we just proceed to username step, password will be verified on join
-      step = 'username';
-    } finally {
-      isLoading.set(false);
-    }
+    step = 'username';
   }
 
   async function handleUsernameSubmit() {
@@ -93,21 +77,17 @@
     error.set(null);
     
     try {
-      // Check if username exists
       const result = await api.checkUser(roomName, username);
       if (result.success && result.data) {
         userExists = result.data.exists;
         userIsPersistent = result.data.is_persistent;
         
         if (userExists && userIsPersistent) {
-          // Need password for existing persistent user
           step = 'user_password';
         } else if (userExists && !userIsPersistent) {
-          // Username taken by anonymous user - cannot join
           error.set(t('username_taken_anonymous', $locale));
           userExists = false;
         } else {
-          // New user - can create account
           step = 'create_user';
         }
       }
@@ -192,20 +172,30 @@
   <title>{t('join_room', $locale)} - TomatoTogether</title>
 </svelte:head>
 
-<main class="landing">
+<main class="join-room">
+  <button class="btn-text back-btn" onclick={() => goto('/')}>
+    ← {t('back_home', $locale)}
+  </button>
+
   <div class="hero">
-    <h1>🍅 TomatoTogether</h1>
-    <p>{t('tagline', $locale)}</p>
+    <h1>{t('join_room_title', $locale)}</h1>
+    <p class="step-hint">
+      {#if step === 'room'}
+        {t('enter_room_name', $locale)}
+      {:else if step === 'room_password'}
+        {t('room_requires_password', $locale)}
+      {:else if step === 'username'}
+        {t('choose_username', $locale)}
+      {:else if step === 'user_password'}
+        {t('login_existing', $locale)}
+      {:else if step === 'create_user'}
+        {t('create_account', $locale)}
+      {/if}
+    </p>
   </div>
 
-  <div class="card">
-    <button class="link" onclick={() => goto('/')}>
-      ← {t('back_home', $locale)}
-    </button>
-    
+  <div class="form-card card">
     {#if step === 'room'}
-      <h2>{t('join_room_title', $locale)}</h2>
-      <p class="hint">{t('enter_room_name', $locale)}</p>
       <form onsubmit={(e) => { e.preventDefault(); handleRoomSubmit(); }}>
         <div class="form-group">
           <label for="roomName">{t('room_name', $locale)}</label>
@@ -219,17 +209,19 @@
         </div>
         
         {#if $error}
-          <p class="error">{$error}</p>
+          <p class="form-error">{$error}</p>
         {/if}
         
-        <button class="primary" type="submit" disabled={$isLoading}>
-          {$isLoading ? t('loading', $locale) : t('next', $locale)}
+        <button class="btn-primary btn-full" type="submit" disabled={$isLoading}>
+          {#if $isLoading}
+            <span class="spinner"></span>
+          {:else}
+            {t('next', $locale)} →
+          {/if}
         </button>
       </form>
       
     {:else if step === 'room_password'}
-      <h2>{t('room_password', $locale)}</h2>
-      <p class="hint">{t('room_requires_password', $locale)}</p>
       <form onsubmit={(e) => { e.preventDefault(); handleRoomPasswordSubmit(); }}>
         <div class="form-group">
           <label for="roomPassword">{t('room_password', $locale)}</label>
@@ -242,14 +234,12 @@
           />
         </div>
         
-        <button class="primary" type="submit" disabled={$isLoading}>
-          {t('next', $locale)}
+        <button class="btn-primary btn-full" type="submit" disabled={$isLoading}>
+          {t('next', $locale)} →
         </button>
       </form>
       
     {:else if step === 'username'}
-      <h2>{t('set_username', $locale)}</h2>
-      <p class="hint">{t('choose_username', $locale)}</p>
       <form onsubmit={(e) => { e.preventDefault(); handleUsernameSubmit(); }}>
         <div class="form-group">
           <label for="username">{t('username', $locale)}</label>
@@ -263,18 +253,26 @@
         </div>
         
         {#if $error}
-          <p class="error">{$error}</p>
+          <p class="form-error">{$error}</p>
         {/if}
         
-        <button class="primary" type="submit" disabled={$isLoading || checkingUser}>
-          {checkingUser ? t('loading', $locale) : t('next', $locale)}
+        <button class="btn-primary btn-full" type="submit" disabled={$isLoading || checkingUser}>
+          {#if checkingUser}
+            <span class="spinner"></span>
+            {t('checking', $locale)}
+          {:else}
+            {t('next', $locale)} →
+          {/if}
         </button>
       </form>
       
     {:else if step === 'user_password'}
-      <h2>{t('login_existing', $locale)}</h2>
-      <p class="hint">{t('existing_user_notice', $locale)}</p>
       <form onsubmit={(e) => { e.preventDefault(); handleLoginPersistentUser(); }}>
+        <div class="user-info">
+          <span class="user-avatar">👤</span>
+          <span class="user-name">{username}</span>
+        </div>
+        
         <div class="form-group">
           <label for="userPassword">{t('password', $locale)}</label>
           <input
@@ -287,17 +285,24 @@
         </div>
         
         {#if $error}
-          <p class="error">{$error}</p>
+          <p class="form-error">{$error}</p>
         {/if}
         
-        <button class="primary" type="submit" disabled={$isLoading}>
-          {$isLoading ? t('loading', $locale) : t('join', $locale)}
+        <button class="btn-primary btn-full" type="submit" disabled={$isLoading}>
+          {#if $isLoading}
+            <span class="spinner"></span>
+          {:else}
+            {t('join', $locale)}
+          {/if}
         </button>
       </form>
       
     {:else if step === 'create_user'}
-      <h2>{t('create_account', $locale)}</h2>
-      <p class="hint">{t('password_for_persistent', $locale)}</p>
+      <div class="new-user-notice">
+        <span class="user-avatar">🆕</span>
+        <span>{t('new_user', $locale)}</span>
+      </div>
+      
       <form onsubmit={(e) => { e.preventDefault(); handleCreateUser(); }}>
         <div class="form-group">
           <label for="userPassword">{t('set_password', $locale)}</label>
@@ -307,19 +312,23 @@
             bind:value={userPassword}
             placeholder={t('password_placeholder', $locale)}
           />
-          <span class="hint-small">{t('persistent_hint', $locale)}</span>
+          <span class="form-hint">{t('persistent_hint', $locale)}</span>
         </div>
         
         {#if $error}
-          <p class="error">{$error}</p>
+          <p class="form-error">{$error}</p>
         {/if}
         
-        <button class="primary" type="submit" disabled={$isLoading}>
-          {$isLoading ? t('loading', $locale) : t('join_room', $locale)}
-        </button>
-        
-        {#if !userPassword}
-          <button class="secondary" type="button" onclick={handleAnonymousJoin} disabled={$isLoading}>
+        {#if userPassword}
+          <button class="btn-primary btn-full" type="submit" disabled={$isLoading}>
+            {#if $isLoading}
+              <span class="spinner"></span>
+            {:else}
+              🍅 {t('join_room', $locale)}
+            {/if}
+          </button>
+        {:else}
+          <button class="btn-secondary btn-full" type="button" onclick={handleAnonymousJoin} disabled={$isLoading}>
             {t('join_anonymous', $locale)}
           </button>
         {/if}
@@ -327,7 +336,7 @@
     {/if}
     
     {#if step !== 'room'}
-      <button class="link" onclick={goBack}>
+      <button class="btn-text" onclick={goBack}>
         ← {t('back', $locale)}
       </button>
     {/if}
@@ -335,13 +344,25 @@
 </main>
 
 <style>
-  .landing {
-    min-height: 100vh;
+  .join-room {
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 2rem;
+    background: var(--color-bg-0);
+  }
+
+  .back-btn {
+    position: fixed;
+    top: 1.25rem;
+    left: 1.25rem;
+    color: var(--color-fg-muted);
+  }
+
+  .back-btn:hover {
+    color: var(--color-fg-0);
   }
 
   .hero {
@@ -350,69 +371,71 @@
   }
 
   .hero h1 {
-    font-size: 2.5rem;
+    font-size: var(--text-2xl);
     margin-bottom: 0.5rem;
   }
 
-  .hero p {
-    color: var(--color-text-secondary);
-    font-size: 1.125rem;
+  .step-hint {
+    color: var(--color-fg-muted);
+    font-size: var(--text-sm);
   }
 
-  .card {
+  .form-card {
     width: 100%;
     max-width: 400px;
-  }
-
-  .card h2 {
-    margin-bottom: 0.5rem;
-    text-align: center;
-  }
-
-  .hint {
-    color: var(--color-text-secondary);
-    font-size: 0.875rem;
-    text-align: center;
-    margin-bottom: 1.5rem;
-  }
-
-  .hint-small {
-    color: var(--color-text-secondary);
-    font-size: 0.75rem;
-    display: block;
-    margin-top: 0.25rem;
-  }
-
-  .link {
-    background: none;
-    padding: 0;
-    color: var(--color-text-secondary);
-    margin-bottom: 1rem;
-    text-align: left;
-    width: 100%;
-  }
-
-  .link:hover {
-    color: var(--color-text);
-  }
-
-  form {
     display: flex;
     flex-direction: column;
     gap: 1rem;
   }
 
-  .form-group {
+  .user-info {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--color-bg-2);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.5rem;
   }
 
-  button[type="submit"],
-  button[type="button"] {
-    width: 100%;
+  .user-avatar {
+    font-size: 1.5rem;
   }
 
-  .secondary {
-    margin-top: 0.5rem;
+  .user-name {
+    font-weight: 600;
+    color: var(--color-fg-0);
+  }
+
+  .new-user-notice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--color-brand-subtle);
+    border-radius: var(--radius-md);
+    color: var(--color-brand);
+    margin-bottom: 0.5rem;
+  }
+
+  .spinner {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: var(--radius-full);
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 640px) {
+    .form-card {
+      padding: 1.25rem;
+    }
   }
 </style>

@@ -231,6 +231,33 @@ PORT=8081 ./server_test
 
 ---
 
+## 🏗️ 后端构建规范
+
+后端使用 Makefile 管理构建，请使用以下命令：
+
+### 构建命令
+```bash
+cd backend
+make build      # 编译到 bin/tomatogether
+make run        # 编译并运行
+make clean      # 清理构建产物
+make test       # 运行测试
+make dev        # 开发模式构建（详细输出）
+make help       # 显示帮助信息
+```
+
+### 构建产物位置
+- **二进制文件**：`backend/bin/tomatogether`
+- **构建目录**：`backend/bin/`（已加入 `.gitignore`）
+- **日志文件**：`backend/server.log`（运行时生成）
+
+### 注意事项
+- 构建产物统一放在 `bin/` 目录，不要直接放在 `backend/` 根目录
+- 测试时使用 `PORT=8081 ./bin/tomatogether` 避免端口冲突
+- 启动时会自动执行数据库迁移，无需手动运行
+
+---
+
 ## 🌐 国际化 (i18n) 指南
 
 ### 语言代码

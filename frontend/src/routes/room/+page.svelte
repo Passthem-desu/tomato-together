@@ -17,11 +17,10 @@
   } from '$lib/store';
   import { locale, t } from '$lib/i18n';
 
-  let displayTime = $state(25 * 60); // 25 minutes in seconds
+  let displayTime = $state(25 * 60);
   let timerInterval: number | null = null;
   let pollInterval: number | null = null;
 
-  // Timer settings (in minutes for UI)
   let plannedMinutes = $state(25);
   let restMinutes = $state(5);
   let longBreakMinutes = $state(15);
@@ -32,17 +31,14 @@
       return;
     }
     
-    // Set initial display time from pomodoro status or default
     if ($pomodoroStatus.remaining_seconds !== undefined) {
       displayTime = $pomodoroStatus.remaining_seconds;
     }
     
-    // Timer: tick every second
     timerInterval = setInterval(() => {
       tickTimer();
     }, 1000) as unknown as number;
     
-    // Polling: refresh users every 5 seconds
     refreshRoomUsers();
     pollInterval = setInterval(() => {
       refreshRoomUsers();
@@ -72,7 +68,6 @@
       rest_duration: restMinutes * 60,
       long_break_duration: longBreakMinutes * 60,
     });
-    // Set initial display time
     displayTime = plannedMinutes * 60;
   }
 
@@ -103,6 +98,16 @@
       goto('/');
     }
   }
+
+  function getStatusLabel(status: string) {
+    switch (status) {
+      case 'idle': return t('idle', $locale);
+      case 'focusing': return t('focusing', $locale);
+      case 'following': return `${t('following', $locale)} ${$pomodoroStatus.leader_username}`;
+      case 'rest': return t('resting', $locale);
+      default: return '';
+    }
+  }
 </script>
 
 <svelte:head>
@@ -110,34 +115,36 @@
 </svelte:head>
 
 <main class="room">
-  <header>
+  <header class="room-header">
     <div class="header-left">
-      <h1>{$currentRoom?.name || t('room_title', $locale)}</h1>
-      <span class="member-count">{$roomUsers.length} {t('online', $locale)}</span>
+      <div class="room-avatar">🍅</div>
+      <div class="room-info">
+        <h1>{$currentRoom?.name || t('room_title', $locale)}</h1>
+        <div class="room-meta">
+          <span class="status-dot online"></span>
+          <span class="member-count">{$roomUsers.length} {t('online', $locale)}</span>
+        </div>
+      </div>
     </div>
     <div class="header-right">
-      <span class="username">{$currentMember?.username}</span>
-      {#if $currentMember?.is_owner}
-        <span class="badge owner">{t('owner', $locale)}</span>
-      {/if}
-      <button class="secondary" onclick={handleLogout}>{t('logout', $locale)}</button>
+      <div class="user-badge">
+        <span class="user-name">{$currentMember?.username}</span>
+        {#if $currentMember?.is_owner}
+          <span class="badge">{t('owner', $locale)}</span>
+        {/if}
+      </div>
+      <button class="btn-ghost btn-sm" onclick={handleLogout}>
+        {t('logout', $locale)}
+      </button>
     </div>
   </header>
 
-  <div class="content">
-    <section class="pomodoro-section card">
+  <div class="room-content">
+    <section class="timer-card card">
       <div class="timer-display">
         <span class="time">{formatTime(displayTime)}</span>
-        <span class="status">
-          {#if $pomodoroStatus.status === 'idle'}
-            {t('idle', $locale)}
-          {:else if $pomodoroStatus.status === 'focusing'}
-            {t('focusing', $locale)} 🎯
-          {:else if $pomodoroStatus.status === 'following'}
-            {t('following', $locale)} {$pomodoroStatus.leader_username}
-          {:else if $pomodoroStatus.status === 'rest'}
-            {t('resting', $locale)} ☕
-          {/if}
+        <span class="status-label" class:focusing={$pomodoroStatus.status === 'focusing'} class:resting={$pomodoroStatus.status === 'rest'}>
+          {getStatusLabel($pomodoroStatus.status)}
         </span>
       </div>
 
@@ -156,58 +163,65 @@
             <input id="longBreakMinutes" type="number" bind:value={longBreakMinutes} min="1" max="60" />
           </div>
         </div>
-        <button class="primary start-btn" onclick={handleStart} disabled={$isLoading}>
-          {t('start_pomodoro', $locale)}
+        <button class="btn-primary btn-lg btn-full" onclick={handleStart} disabled={$isLoading}>
+          🍅 {t('start_pomodoro', $locale)}
         </button>
       {:else}
-        <button class="secondary end-btn" onclick={handleEnd} disabled={$isLoading}>
-          {t('end_pomodoro', $locale)}
-        </button>
-        {#if $pomodoroStatus.status === 'following'}
-          <button class="secondary unfollow-btn" onclick={unfollowPomodoro} disabled={$isLoading}>
-            {t('unfollow', $locale)}
+        <div class="timer-actions">
+          <button class="btn-secondary" onclick={handleEnd} disabled={$isLoading}>
+            {t('end_pomodoro', $locale)}
           </button>
-        {/if}
+          {#if $pomodoroStatus.status === 'following'}
+            <button class="btn-ghost" onclick={unfollowPomodoro} disabled={$isLoading}>
+              {t('unfollow', $locale)}
+            </button>
+          {/if}
+        </div>
       {/if}
 
       {#if $error}
-        <p class="error">{$error}</p>
+        <p class="form-error">{$error}</p>
       {/if}
     </section>
 
-    <section class="users-section card">
+    <section class="users-card card">
       <h2>{t('online_users', $locale)}</h2>
+      
       {#if $roomUsers.length === 0}
-        <p class="empty">{t('no_online_users', $locale)}</p>
+        <p class="empty-state">{t('no_online_users', $locale)}</p>
       {:else}
         <div class="users-list">
           {#each $roomUsers as user}
             <div class="user-item">
               <div class="user-info">
-                <span class="user-name">
-                  {user.username}
-                  {#if user.id === $currentMember?.id}
-                    ({t('me', $locale)})
-                  {/if}
-                </span>
-                {#if user.is_owner}
-                  <span class="badge owner">{t('owner', $locale)}</span>
-                {/if}
-                {#if user.status}
-                  <span class="user-status">
-                    {user.status.emoji} {user.status.message}
+                <div class="user-avatar">
+                  {user.is_owner ? '👑' : '👤'}
+                </div>
+                <div class="user-details">
+                  <span class="user-name">
+                    {user.username}
+                    {#if user.id === $currentMember?.id}
+                      <span class="you-badge">{t('me', $locale)}</span>
+                    {/if}
                   </span>
-                {/if}
+                  {#if user.status}
+                    <span class="user-status">{user.status.emoji} {user.status.message}</span>
+                  {/if}
+                </div>
               </div>
               <div class="user-pomodoro">
                 {#if user.pomodoro?.is_active}
                   {#if user.pomodoro.is_following}
-                    <span class="following">{t('following', $locale)} {user.pomodoro.leader_username}</span>
+                    <span class="following">
+                      🔄 {t('following', $locale)} {user.pomodoro.leader_username}
+                    </span>
                   {:else}
-                    <span class="active">🍅 {user.pomodoro.remaining_seconds ? formatTime(user.pomodoro.remaining_seconds) : ''}</span>
+                    <span class="active-pomodoro">
+                      🍅 {user.pomodoro.remaining_seconds ? formatTime(user.pomodoro.remaining_seconds) : ''}
+                    </span>
                   {/if}
                 {:else}
-                  <span class="idle">{t('idle', $locale)}</span>
+                  <span class="idle-status">{t('idle', $locale)}</span>
                 {/if}
               </div>
             </div>
@@ -217,8 +231,8 @@
     </section>
 
     <section class="actions-section">
-      <button class="secondary" onclick={handleLeave}>
-        {t('leave_room', $locale)}
+      <button class="btn-ghost" onclick={handleLeave}>
+        ← {t('leave_room', $locale)}
       </button>
     </section>
   </div>
@@ -226,85 +240,125 @@
 
 <style>
   .room {
-    min-height: 100vh;
-    padding: 1rem;
+    min-height: 100dvh;
+    padding: 1.5rem;
+    background: var(--color-bg-0);
   }
 
-  header {
+  /* Header */
+  .room-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 1rem 0;
     margin-bottom: 2rem;
-    padding-bottom: 1rem;
     border-bottom: 1px solid var(--color-border);
   }
 
-  .header-left h1 {
-    font-size: 1.5rem;
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+  }
+
+  .room-avatar {
+    font-size: 2.5rem;
+  }
+
+  .room-info h1 {
+    font-size: var(--text-xl);
+    font-weight: 600;
     margin-bottom: 0.25rem;
   }
 
-  .member-count {
-    color: var(--color-text-secondary);
-    font-size: 0.875rem;
+  .room-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-fg-muted);
+    font-size: var(--text-sm);
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-full);
+    background: var(--color-fg-muted);
+  }
+
+  .status-dot.online {
+    background: var(--color-success);
   }
 
   .header-right {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 1rem;
   }
 
-  .username {
+  .user-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .user-badge .user-name {
     font-weight: 500;
   }
 
   .badge {
+    display: inline-flex;
     padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 500;
+    border-radius: var(--radius-full);
+    background: var(--color-brand-subtle);
+    color: var(--color-brand);
   }
 
-  .badge.owner {
-    background: var(--color-primary-light);
-    color: var(--color-primary);
-  }
-
-  .content {
-    max-width: 600px;
+  /* Content */
+  .room-content {
+    max-width: 560px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
   }
 
-  .card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 0.75rem;
-    padding: 1.5rem;
-  }
-
-  .pomodoro-section {
+  /* Timer Card */
+  .timer-card {
     text-align: center;
+    padding: 2rem;
   }
 
   .timer-display {
     margin-bottom: 1.5rem;
   }
 
-  .timer-display .time {
-    font-size: 4rem;
+  .time {
+    font-size: 4.5rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
     display: block;
     margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--color-fg-0), var(--color-brand));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
-  .timer-display .status {
-    color: var(--color-text-secondary);
-    font-size: 1.125rem;
+  .status-label {
+    color: var(--color-fg-muted);
+    font-size: var(--text-lg);
+  }
+
+  .status-label.focusing {
+    color: var(--color-brand);
+  }
+
+  .status-label.resting {
+    color: var(--color-success);
   }
 
   .timer-settings {
@@ -322,28 +376,41 @@
   }
 
   .setting label {
-    font-size: 0.75rem;
-    color: var(--color-text-secondary);
+    font-size: var(--text-xs);
+    color: var(--color-fg-muted);
+    font-weight: 500;
   }
 
   .setting input {
-    width: 80px;
+    width: 70px;
     text-align: center;
+    padding: 0.5rem;
   }
 
-  .start-btn, .end-btn, .unfollow-btn {
-    min-width: 150px;
+  .timer-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
   }
 
-  .users-section h2 {
+  /* Users Card */
+  .users-card h2 {
+    font-size: var(--text-base);
+    font-weight: 600;
     margin-bottom: 1rem;
-    font-size: 1.125rem;
+    color: var(--color-fg-1);
+  }
+
+  .empty-state {
+    text-align: center;
+    color: var(--color-fg-muted);
+    padding: 1.5rem;
   }
 
   .users-list {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .user-item {
@@ -351,112 +418,110 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem;
-    background: var(--color-surface-hover);
-    border-radius: 0.5rem;
+    background: var(--color-bg-0);
+    border-radius: var(--radius-md);
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+
+  .user-item:hover {
+    background: var(--color-bg-2);
   }
 
   .user-info {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+    gap: 0.75rem;
   }
 
-  .user-name {
+  .user-avatar {
+    font-size: 1.25rem;
+    width: 2rem;
+    text-align: center;
+  }
+
+  .user-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .user-details .user-name {
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .you-badge {
+    font-size: var(--text-xs);
+    padding: 0.125rem 0.375rem;
+    background: var(--color-bg-2);
+    border-radius: var(--radius-sm);
+    color: var(--color-fg-muted);
   }
 
   .user-status {
-    font-size: 0.875rem;
-    color: var(--color-text-secondary);
+    font-size: var(--text-xs);
+    color: var(--color-fg-muted);
   }
 
-  .user-pomodoro .active {
-    color: var(--color-primary);
-    font-weight: 500;
-  }
-
-  .user-pomodoro .idle {
-    color: var(--color-text-secondary);
-    font-size: 0.875rem;
+  .user-pomodoro .active-pomodoro {
+    font-weight: 600;
+    color: var(--color-brand);
   }
 
   .user-pomodoro .following {
-    color: var(--color-secondary);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
+    color: var(--color-fg-muted);
   }
 
-  .empty {
-    color: var(--color-text-secondary);
-    text-align: center;
-    padding: 1rem;
+  .user-pomodoro .idle-status {
+    font-size: var(--text-sm);
+    color: var(--color-fg-muted);
   }
 
+  /* Actions */
   .actions-section {
     text-align: center;
+    padding: 1rem 0;
   }
 
-  .error {
-    color: var(--color-error);
-    background: var(--color-error-light);
-    padding: 0.75rem;
-    border-radius: 0.5rem;
+  .form-error {
     margin-top: 1rem;
+    padding: 0.75rem;
+    background: var(--color-error-subtle);
+    color: var(--color-error);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
   }
 
-  button {
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    cursor: pointer;
-    border: none;
-    transition: background-color 0.2s;
-  }
-
-  button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .primary {
-    background: var(--color-primary);
-    color: white;
-  }
-
-  .primary:hover:not(:disabled) {
-    background: var(--color-primary-dark);
-  }
-
-  .secondary {
-    background: var(--color-surface-hover);
-    color: var(--color-text);
-  }
-
-  .secondary:hover:not(:disabled) {
-    background: var(--color-border);
-  }
-
-  input {
-    padding: 0.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: 0.5rem;
-    font-size: 1rem;
-    background: var(--color-background);
-  }
-
-  input:focus {
-    outline: none;
-    border-color: var(--color-primary);
-  }
-
+  /* Responsive */
   @media (max-width: 640px) {
-    .timer-display .time {
-      font-size: 3rem;
+    .room {
+      padding: 1rem;
+    }
+
+    .room-header {
+      flex-direction: column;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .header-left {
+      flex-direction: column;
+    }
+
+    .time {
+      font-size: 3.5rem;
     }
 
     .timer-settings {
       flex-direction: column;
       align-items: center;
+    }
+
+    .timer-actions {
+      flex-direction: column;
     }
 
     .user-item {

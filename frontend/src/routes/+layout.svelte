@@ -3,4 +3,13 @@
   let { children } = $props();
 </script>
 
-{@render children()}
+<div class="app">
+  {@render children()}
+</div>
+
+<style>
+  .app {
+    min-height: 100dvh;
+    background: var(--color-bg-0);
+  }
+</style>

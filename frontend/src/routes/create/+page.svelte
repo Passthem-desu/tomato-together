@@ -5,7 +5,6 @@
   import { getMember, isAuthenticated } from '$lib/api';
   import { locale, t, getErrorMessage } from '$lib/i18n';
 
-  // Step 1: room info, Step 2: user info
   let step = $state(1);
   let roomName = $state('');
   let roomPassword = $state('');
@@ -13,10 +12,8 @@
   let userPassword = $state('');
 
   onMount(() => {
-    // Clear any previous error
     error.set(null);
 
-    // Check if already logged in
     if (isAuthenticated()) {
       const member = getMember();
       if (member) {
@@ -24,19 +21,16 @@
         goto('/room');
       }
     }
-    // Focus roomName input on mount
-    document.getElementById('roomName')?.focus();
+
+    const input = document.getElementById('roomName');
+    input?.focus();
   });
 
-  // Focus input when step changes
   $effect(() => {
-    const _ = step; // track step changes
+    const _ = step;
     setTimeout(() => {
-      if (step === 1) {
-        document.getElementById('roomName')?.focus();
-      } else {
-        document.getElementById('username')?.focus();
-      }
+      const id = step === 1 ? 'roomName' : 'username';
+      document.getElementById(id)?.focus();
     }, 50);
   });
 
@@ -46,12 +40,7 @@
   }
 
   function handleStep2() {
-    if (!username.trim() || !userPassword.trim()) {
-      if (!userPassword) {
-        error.set(t('error_password_required', $locale));
-      }
-      return;
-    }
+    if (!username.trim() || !userPassword.trim()) return;
     
     isLoading.set(true);
     error.set(null);
@@ -81,15 +70,19 @@
 
 <main class="create-room">
   <div class="hero">
-    <h1>🍅 TomatoTogether</h1>
-    <p>{t('create_room_title', $locale)}</p>
+    <div class="step-indicator">
+      <span class="step" class:active={step === 1} class:completed={step > 1}>1</span>
+      <span class="step-line"></span>
+      <span class="step" class:active={step === 2}>2</span>
+    </div>
+    <h1>{step === 1 ? t('room_info', $locale) : t('account_info', $locale)}</h1>
+    <p class="subtitle">
+      {step === 1 ? t('create_room_title', $locale) : t('owner_notice', $locale)}
+    </p>
   </div>
 
-  <div class="card">
+  <div class="form-card card">
     {#if step === 1}
-      <h2>{t('room_info', $locale)}</h2>
-      <p class="hint">{t('room_name', $locale)}</p>
-      
       <form onsubmit={(e) => { e.preventDefault(); handleStep1(); }}>
         <div class="form-group">
           <label for="roomName">{t('room_name', $locale)}</label>
@@ -103,29 +96,29 @@
         </div>
         
         <div class="form-group">
-          <label for="roomPassword">{t('room_password', $locale)} <span class="optional">{t('room_password_optional', $locale)}</span></label>
+          <label for="roomPassword">
+            {t('room_password', $locale)}
+            <span class="optional">({t('optional', $locale)})</span>
+          </label>
           <input
             id="roomPassword"
             type="password"
             bind:value={roomPassword}
-            placeholder={t('room_password', $locale)}
+            placeholder={t('room_password_placeholder', $locale)}
           />
-          <span class="hint-small">{t('room_password_hint', $locale)}</span>
+          <span class="form-hint">{t('room_password_hint', $locale)}</span>
         </div>
         
         {#if $error}
-          <p class="error">{$error}</p>
+          <p class="form-error">{$error}</p>
         {/if}
         
-        <button class="primary" type="submit" disabled={$isLoading}>
-          {t('next', $locale)}
+        <button class="btn-primary btn-full" type="submit">
+          {t('next', $locale)} →
         </button>
       </form>
       
     {:else}
-      <h2>{t('account_info', $locale)}</h2>
-      <p class="hint">{t('owner_notice', $locale)}</p>
-      
       <form onsubmit={(e) => { e.preventDefault(); handleStep2(); }}>
         <div class="form-group">
           <label for="username">{t('username', $locale)}</label>
@@ -147,24 +140,29 @@
             placeholder={t('password_placeholder', $locale)}
             required
           />
-          <span class="hint-small">{t('password_hint', $locale)}</span>
+          <span class="form-hint">{t('password_hint', $locale)}</span>
         </div>
         
         {#if $error}
-          <p class="error">{$error}</p>
+          <p class="form-error">{$error}</p>
         {/if}
         
-        <button class="primary" type="submit" disabled={$isLoading}>
-          {$isLoading ? t('loading', $locale) : t('create', $locale)}
+        <button class="btn-primary btn-full" type="submit" disabled={$isLoading}>
+          {#if $isLoading}
+            <span class="spinner"></span>
+            {t('loading', $locale)}
+          {:else}
+            🍅 {t('create_room', $locale)}
+          {/if}
         </button>
       </form>
       
-      <button class="link" onclick={goBack}>
+      <button class="btn-text btn-full" onclick={goBack}>
         ← {t('back', $locale)}
       </button>
     {/if}
     
-    <button class="link cancel" onclick={() => goto('/')}>
+    <button class="btn-text cancel" onclick={() => goto('/')}>
       {t('cancel', $locale)}
     </button>
   </div>
@@ -172,12 +170,13 @@
 
 <style>
   .create-room {
-    min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 2rem;
+    background: var(--color-bg-0);
   }
 
   .hero {
@@ -185,76 +184,89 @@
     margin-bottom: 2rem;
   }
 
-  .hero h1 {
-    font-size: 2.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .hero p {
-    color: var(--color-text-secondary);
-    font-size: 1.125rem;
-  }
-
-  .card {
-    width: 100%;
-    max-width: 400px;
-  }
-
-  .card h2 {
-    margin-bottom: 0.5rem;
-    text-align: center;
-  }
-
-  .hint {
-    color: var(--color-text-secondary);
-    font-size: 0.875rem;
-    text-align: center;
+  .step-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
     margin-bottom: 1.5rem;
   }
 
-  .optional {
-    color: var(--color-text-secondary);
-    font-size: 0.875rem;
+  .step {
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full);
+    background: var(--color-bg-2);
+    color: var(--color-fg-muted);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    transition: all var(--duration-fast) var(--ease-out);
   }
 
-  .hint-small {
-    color: var(--color-text-secondary);
-    font-size: 0.75rem;
-    display: block;
-    margin-top: 0.25rem;
+  .step.active {
+    background: var(--color-brand);
+    color: white;
   }
 
-  .link {
-    background: none;
-    padding: 0;
-    color: var(--color-text-secondary);
-    margin-top: 1rem;
-    text-align: center;
+  .step.completed {
+    background: var(--color-success);
+    color: white;
+  }
+
+  .step-line {
+    width: 3rem;
+    height: 2px;
+    background: var(--color-border);
+  }
+
+  .hero h1 {
+    font-size: var(--text-2xl);
+    margin-bottom: 0.5rem;
+  }
+
+  .subtitle {
+    color: var(--color-fg-muted);
+    font-size: var(--text-sm);
+  }
+
+  .form-card {
     width: 100%;
-    display: block;
-  }
-
-  .link:hover {
-    color: var(--color-text);
-  }
-
-  .link.cancel {
-    margin-top: 0.5rem;
-  }
-
-  form {
+    max-width: 400px;
     display: flex;
     flex-direction: column;
     gap: 1rem;
   }
 
-  .form-group {
-    display: flex;
-    flex-direction: column;
+  .optional {
+    color: var(--color-fg-muted);
+    font-weight: 400;
   }
 
-  button[type="submit"] {
-    width: 100%;
+  .cancel {
+    color: var(--color-fg-muted);
+    font-size: var(--text-sm);
     margin-top: 0.5rem;
+  }
+
+  .spinner {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: var(--radius-full);
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 640px) {
+    .form-card {
+      padding: 1.25rem;
+    }
   }
 </style>
