@@ -103,6 +103,12 @@ tomatogether/
 ├── frontend/                 # SvelteKit 前端
 │   ├── src/
 │   │   ├── lib/             # 组件、工具
+│   │   │   ├── i18n/        # 国际化 (i18n)
+│   │   │   │   ├── locales.ts
+│   │   │   │   ├── store.ts
+│   │   │   │   └── index.ts
+│   │   │   ├── api.ts       # API 客户端
+│   │   │   └── store.ts     # Svelte stores
 │   │   └── routes/          # 页面
 │   ├── package.json
 │   └── ...
@@ -135,6 +141,33 @@ tomatogether/
 1. 先备份原内容
 2. 修改 PRD.md 或 API.md
 3. 在 `TODO.md` 中标记对应任务为完成
+
+---
+
+## 🧪 测试规范
+
+### 后端测试服务器
+- 如果需要启动后端测试服务器，**不要占用默认的 8080 端口**
+- 使用其他可用端口（如 8081、8082 等），避免影响用户正在运行的测试服务器
+- 测试完成后**及时关闭测试服务器**
+
+### 测试命令示例
+```bash
+# 查看 8080 端口是否被占用
+lsof -i :8080
+
+# 如果 8080 被占用，使用其他端口
+PORT=8081 go run main.go
+
+# 或编译后运行
+go build -o server_test .
+PORT=8081 ./server_test
+```
+
+### 前端测试
+- 测试前确保后端服务器正常运行
+- 如需修改 API 代理配置，检查 `vite.config.ts`
+- 编译前清理缓存：`rm -rf .svelte-kit && npm run build`
 
 ---
 
@@ -195,6 +228,54 @@ tomatogether/
 1. 完成任何有意义的开发工作后，**必须更新工作日志**
 2. 日志应包含足够细节，方便他人复现和理解
 3. 如果日志已存在，在末尾追加新内容（不要覆盖）
+
+---
+
+## 🌐 国际化 (i18n) 指南
+
+### 语言代码
+- `zh-hans` - 简体中文
+- `zh-hant` - 繁體中文
+- `en` - English
+- `ja` - 日本語
+
+### 文件结构
+```
+frontend/src/lib/i18n/
+├── locales.ts    # 语言配置（语言列表、locale 存储）
+├── store.ts     # locale 状态管理
+└── index.ts     # 翻译文本和工具函数
+```
+
+### 添加翻译
+1. 在 `index.ts` 中为每种语言添加翻译键值对
+2. 翻译键使用小写下划线格式（如 `room_name`、`error_invalid_password`）
+
+### 在组件中使用
+```svelte
+<script>
+  import { locale, t } from '$lib/i18n';
+  
+  // 翻译文本
+  const greeting = t('hello', $locale);
+  
+  // 或直接在模板中
+  // {t('room_name', $locale)}
+</script>
+```
+
+### 在 store 中使用（错误处理）
+```typescript
+import { getErrorMessage, locale } from './i18n';
+import { get } from 'svelte/store';
+
+error.set(getErrorMessage(e, get(locale)));
+```
+
+### 注意事项
+- 所有用户可见文本都必须使用 `t()` 函数翻译
+- 错误信息需要通过 `getErrorMessage()` 转换
+- 确认对话框等 JavaScript 原生文本也需要国际化
 
 ---
 

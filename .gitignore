@@ -21,6 +21,7 @@ logs/
 
 # 后端二进制
 backend/tomatogether
+backend/server
 backend/*.exe
 
 # 前端构建
