@@ -1,13 +1,41 @@
 <script lang="ts">
 	import { locale, t } from '$lib/i18n';
+	import { api } from '$lib/api';
 	import type { UserInfo } from '$lib/api';
 
 	interface Props {
 		users: UserInfo[];
 		currentMemberId: string;
+		isOwner: boolean;
 	}
 
-	let { users, currentMemberId }: Props = $props();
+	let { users, currentMemberId, isOwner }: Props = $props();
+
+	let myMessage = $state('');
+	let statusSaving = $state(false);
+
+	// Status bubble animation: memberId -> { message, timeoutId }
+	let statusBubbles = $state<Record<string, { message: string }>>({});
+	let prevStatuses: Record<string, string> = {};
+
+	// Detect status changes and show bubble
+	$effect(() => {
+		for (const u of users) {
+			if (!u.id) continue;
+			const prev = prevStatuses[u.id];
+			const curr = u.status?.message || '';
+			if (curr && curr !== prev) {
+				// Show bubble, clear after 3s
+				statusBubbles = { ...statusBubbles, [u.id]: { message: curr } };
+				setTimeout(() => {
+					statusBubbles = Object.fromEntries(
+						Object.entries(statusBubbles).filter(([k]) => k !== u.id)
+					);
+				}, 3000);
+			}
+			prevStatuses = { ...prevStatuses, [u.id]: curr };
+		}
+	});
 
 	function formatTime(s: number) {
 		return `${Math.floor(s / 60)
@@ -21,10 +49,77 @@
 		if (m < 60) return m + 'm';
 		return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
 	}
+
+	async function handleSetStatus() {
+		if (!myMessage.trim()) return;
+		statusSaving = true;
+		try {
+			const roomName = localStorage.getItem('room_name') || '';
+			await api.updateStatus({ room_name: roomName, emoji: '', message: myMessage.trim() });
+			myMessage = '';
+		} catch {
+			/* ignore */
+		}
+		statusSaving = false;
+	}
+
+	async function handleClearStatus() {
+		statusSaving = true;
+		try {
+			const roomName = localStorage.getItem('room_name') || '';
+			await api.deleteStatus(roomName);
+		} catch {
+			/* ignore */
+		}
+		statusSaving = false;
+	}
+
+	async function handleKick(memberId: string) {
+		if (!confirm(t('confirm_kick', $locale))) return;
+		try {
+			await api.kickMember(memberId);
+		} catch {
+			/* ignore */
+		}
+	}
+
+	async function handleTransferOwner(memberId: string) {
+		if (!confirm(t('confirm_transfer_owner', $locale))) return;
+		try {
+			await api.setOwner(memberId);
+		} catch {
+			/* ignore */
+		}
+	}
 </script>
 
 <div class="card users-card">
 	<h2>{t('online_users', $locale)}</h2>
+
+	<!-- Status input for current user -->
+	<div class="status-input-row">
+		<input
+			type="text"
+			class="status-msg-input"
+			maxlength="200"
+			placeholder={t('status_message_placeholder', $locale)}
+			bind:value={myMessage}
+			onkeydown={(e) => {
+				if (e.key === 'Enter') handleSetStatus();
+			}}
+		/>
+		<button class="btn-ghost btn-xs" onclick={handleSetStatus} disabled={statusSaving}>
+			{t('save_settings', $locale)}
+		</button>
+		<button
+			class="btn-ghost btn-xs btn-clear-status"
+			onclick={handleClearStatus}
+			disabled={statusSaving}
+			title={t('clear_status', $locale)}
+		>
+			×
+		</button>
+	</div>
 	{#if users.filter((u) => u.is_online).length === 0}
 		<p class="empty-state">{t('no_online_users', $locale)}</p>
 	{:else}
@@ -51,14 +146,24 @@
 									{t('focus_short', $locale)}</span
 								>
 							{/if}
-							{#if user.status}
-								<span class="user-status"
-									>{user.status.emoji} {user.status.message}</span
-								>
+							{#if user.status?.message}
+								<span class="user-status">{user.status.message}</span>
 							{/if}
 						</div>
 					</div>
 					<div class="user-pomodoro">
+						{#if isOwner && user.id !== currentMemberId}
+							{#if user.is_persistent}
+								<button
+									class="btn-transfer btn-xs"
+									onclick={() => handleTransferOwner(user.id)}
+									>{t('transfer_owner', $locale)}</button
+								>
+							{/if}
+							<button class="btn-kick btn-xs" onclick={() => handleKick(user.id)}
+								>{t('kick', $locale)}</button
+							>
+						{/if}
 						{#if user.pomodoro?.phase && user.pomodoro.phase !== 'idle'}
 							{#if user.pomodoro.is_following}
 								<span class="following"
@@ -84,6 +189,9 @@
 							<span class="idle-status">{t('idle', $locale)}</span>
 						{/if}
 					</div>
+					{#if statusBubbles[user.id]}
+						<div class="status-bubble">{statusBubbles[user.id].message}</div>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -94,8 +202,20 @@
 	.users-card h2 {
 		font-size: var(--text-base);
 		font-weight: 600;
-		margin-bottom: 1rem;
+		margin-bottom: 0.75rem;
 		color: var(--color-fg-1);
+	}
+	.status-input-row {
+		display: flex;
+		gap: 0.375rem;
+		margin-bottom: 0.75rem;
+		padding-bottom: 0.75rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.status-msg-input {
+		flex: 1;
+		padding: 0.3rem 0.5rem;
+		font-size: var(--text-sm);
 	}
 	.empty-state {
 		text-align: center;
@@ -108,6 +228,7 @@
 		gap: 0.5rem;
 	}
 	.user-item {
+		position: relative;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -175,6 +296,73 @@
 	.user-pomodoro .idle-status {
 		font-size: var(--text-sm);
 		color: var(--color-fg-muted);
+	}
+	.btn-kick {
+		padding: 0.15rem 0.4rem;
+		font-size: 0.65rem;
+		border: 1px solid var(--color-error);
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--color-error);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+	.btn-kick:hover {
+		background: var(--color-error-subtle);
+	}
+	.btn-transfer {
+		padding: 0.15rem 0.4rem;
+		font-size: 0.65rem;
+		border: 1px solid var(--color-brand);
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--color-brand);
+		cursor: pointer;
+		transition: all 0.15s;
+		margin-right: 0.25rem;
+	}
+	.btn-transfer:hover {
+		background: var(--color-brand-subtle);
+	}
+	.status-bubble {
+		position: absolute;
+		left: -0.75rem;
+		top: -0.5rem;
+		background: var(--color-brand);
+		color: white;
+		font-size: var(--text-xs);
+		padding: 0.25rem 0.6rem;
+		border-radius: var(--radius-md);
+		white-space: nowrap;
+		animation:
+			bubbleIn 0.3s ease-out,
+			bubbleOut 0.5s ease-in 2.5s forwards;
+		z-index: 10;
+		pointer-events: none;
+	}
+	@keyframes bubbleIn {
+		from {
+			opacity: 0;
+			transform: translateY(0.5rem);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+	@keyframes bubbleOut {
+		to {
+			opacity: 0;
+			transform: translateY(-0.5rem);
+		}
+	}
+	.btn-clear-status {
+		color: var(--color-fg-muted);
+		font-weight: bold;
+		padding: 0.3rem 0.5rem;
+	}
+	.btn-clear-status:hover {
+		color: var(--color-error);
 	}
 	@media (max-width: 640px) {
 		.user-item {

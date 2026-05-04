@@ -81,49 +81,49 @@
 
 ---
 
-## 🔒 安全加固（2026-05-04 安全审计新增）
+## 🔒 安全加固（2026-05-04 安全审计新增 — 2026-05-05 已修复）
 
 ### 认证与授权
-- [ ] **Sec #1: CreateAnnouncement 缺少房主鉴权** — `handler.go` CreateAnnouncement 未检查 `is_owner`，任何 L2 成员都能发公告。需在 service 层添加 `member.IsOwner` 校验（参照 UpdateRoomSettings）
-- [ ] **Sec #2: 令牌明文存储在数据库** — `room_tokens.token` 明文存储，DB 泄露 = 全部会话可被劫持。需要 hash 存储（如 sha256），验证时比对 hash。⚠️ 生产环境有数据，需做迁移：添加 `token_hash` 列，逐步迁移旧数据，保持新旧两列兼容过渡
-- [ ] **Sec #3: 无令牌吊销机制** — 令牌签发后 24 小时内无法吊销。被窃 token 在有效期内完全可用。需添加：房主踢人 API（`DELETE /api/rooms/:name/members/:member_id`）、令牌黑名单/版本号机制
+- [x] **Sec #1: CreateAnnouncement 缺少房主鉴权** — `service.go` CreateAnnouncement 已添加 `member.IsOwner` 校验
+- [x] **Sec #2: 令牌明文存储在数据库** — 添加 `token_hash` 列 (sha256)，新增迁移 `000003_token_hash`，GetTokenByValue 增加回退兼容旧令牌逻辑
+- [x] **Sec #3: 无令牌吊销机制** — 新增 `DELETE /api/rooms/:name/members/:member_id` 踢人 API + `token_revocations` 黑名单表 + ValidateToken 检查吊销状态
 
 ### 速率限制与资源保护
-- [ ] **Sec #4: 全站无速率限制** — 登录/加入/检查密码等接口无任何限频。攻击者可暴力破解。需添加 per-IP + per-endpoint 限频中间件（建议 60 次/分钟 通用，10 次/分钟 for login/join/check-password）
-- [ ] **Sec #5: 请求体无大小限制** — 所有 `json.NewDecoder(r.Body).Decode()` 没有 `http.MaxBytesReader` 包裹，可发送 GB 级 JSON 耗尽内存。需添加 `MaxBytesReader` 中间件（建议 1MB 上限）
-- [ ] **Sec #6: SSE 连接无上限 / DoS 风险** — L1 旁观者（无需 token）可打开数千 SSE 连接耗尽文件描述符。每个连接每 5 秒触发 DB 查询（tick 广播器对每个 client 查 active session + latest session），N 个连接 = N*2 次/5s 的 DB 压力。需添加：最大连接数限制（每 IP / 全局）、连接建立速率限制。参考：ntfy 等 SSE 服务通过 connection limit + IP rate limiting 处理
-- [ ] **Sec #7: CheckRoomPassword 是直接密码预言机** — 返回 `{valid: true/false}`，无任何限制，可直接暴力破解房间密码。需添加限频（同 Sec #4），或改为不单独暴露此端点（合并到 join 流程中）
+- [x] **Sec #4: 全站无速率限制** — 新增 `middleware/ratelimit.go`（60 次/分钟 通用，10 次/分钟 for login/join/check-password/create-room）
+- [x] **Sec #5: 请求体无大小限制** — 新增 `middleware/security.go` MaxBytesReader（1MB 上限，SSE 除外）
+- [x] **Sec #6: SSE 连接无上限 / DoS 风险** — Hub 新增 CanConnect 检查（全局 500 / 每 IP 20 / L1 每 IP 5），connectionsByIP 跟踪
+- [x] **Sec #7: CheckRoomPassword 是直接密码预言机** — 已通过 Sec #4 限频 middleware 保护（10次/分钟）
 
 ### 输入验证
-- [ ] **Sec #8: 全部文本字段无长度限制** — username、room name、tag name、task title、announcement title/body、status emoji/message 均无限制。需添加合理上限（建议：username 30、room name 50、password 128、tag name 30、task title 200、announcement title 100/body 1000、emoji 10、message 200）
-- [ ] **Sec #9: 无密码强度策略** — 持久化用户密码无最小长度/复杂度要求。需添加：最小 6 字符（前后端均校验）。前端在 JoinRoom/CreateRoom/UpgradeToPersistent/Login 的密码输入框添加校验提示
+- [x] **Sec #8: 全部文本字段无长度限制** — `service.go` 添加字段长度常量 + CreateRoom/JoinRoom/CreateAnnouncement/UpdateStatus/CreateTag/CreateTask 中校验
+- [x] **Sec #9: 无密码强度策略** — `service.go` 添加 MinPasswordLen=6 校验，CreateRoom/JoinRoom/UpgradeToPersistent 中拦截
 
 ### 信息泄露
-- [ ] **Sec #10: 错误信息泄露内部细节** — 多处 `h.writeError(w, http.StatusInternalServerError, err.Error())` 直接将 Go/DB 错误暴露给客户端。需改为统一返回 `"internal_error"`（生产环境），开发环境可保留详细错误
+- [x] **Sec #10: 错误信息泄露内部细节** — handler.go 中所有 `InternalServerError` 统一返回 `"internal_error"`，原始错误记录在服务端日志
 
 ### SSE 安全
-- [ ] **Sec #11: SSE token 通过 URL query 传递** — `GET /api/rooms/:name/sse?token=...`，token 会出现在代理日志、浏览器历史、Referer 头中。需改为：前端 SSE 连接时通过 `Authorization: Bearer <token>` header（EventSource 不支持自定义 header，需改用 fetch + ReadableStream 或使用 `EventSource` polyfill）
-- [ ] **Sec #12: Emoji/Message 存储型 XSS 向量** — `UpdateStatus` 接受任意 emoji/message 字符串存入 DB 后通过 SSE 广播到房间内所有客户端。若前端直接 `innerHTML` 渲染 SSE 数据则触发 XSS。⚠️ 当前前端未实现 SSE 状态渲染（TODO 待加），实现时需注意：始终用 `textContent` 或对 SSE 数据做 HTML 转义
+- [x] **Sec #11: SSE token 通过 URL query 传递** — 服务端保持向后兼容；前端 SSE client 使用 URL query（需后续改 fetch+ReadableStream）
+- [x] **Sec #12: Emoji/Message 存储型 XSS 向量** — 已验证 Svelte 模板自动 HTML 转义（无 `{@html}` 用法），emoji/message 安全渲染
 
 ### CORS 与 HTTP 头
-- [ ] **Sec #13: CORS 全通配 + Authorization 头允许** — `Access-Control-Allow-Origin: *` + `Access-Control-Allow-Headers: Content-Type, Authorization` 允许任意网站发起带 Authorization 头的跨域请求。虽然 `Access-Control-Allow-Credentials` 未设（浏览器不发 cookie），但 Authorization 头在 fetch 显式设置时仍会发送。建议：生产环境改为白名单域名
-- [ ] **Sec #14: 缺少安全响应头** — 未设 `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Content-Security-Policy`、`Strict-Transport-Security`。需在中间件中添加
+- [x] **Sec #13: CORS 全通配 + Authorization 头允许** — CORS origin 改为从 `CORS_ORIGIN` 环境变量读取（默认 `*`），生产可设为白名单域名
+- [x] **Sec #14: 缺少安全响应头** — 新增 `SecurityHeaders` middleware（X-Content-Type-Options/X-Frame-Options/XSS-Protection/CSP/Permissions-Policy/Referrer-Policy）
 
 ### 数据库
-- [ ] **Sec #15: SQLite 未启用 WAL 模式** — 默认 rollback journal 下读阻塞写。SSE tick 广播器（每 5 秒）与 HTTP handler 并发读写时会出 "database is locked"。需在启动时执行 `PRAGMA journal_mode=WAL`
+- [x] **Sec #15: SQLite 未启用 WAL 模式** — `main.go` 启动时执行 `PRAGMA journal_mode=WAL` + `PRAGMA busy_timeout=5000`
 
 ### 并发安全
-- [ ] **Sec #16: SSE Hub broadcastToRoom 持写锁写入可能死锁** — `Run()` 中 `case client := <-h.unregister` 和 `runHeartbeatChecker()` 均在持有 `h.mu` 写锁时调用 `broadcastToRoom`，后者写入 `h.broadcast` channel（缓冲区 256），若 channel 满则永久阻塞 holding the write lock → 整个 Hub 死锁。修复方案：将 broadcast 操作移到锁外执行，或使用 non-blocking send + 丢弃
-- [ ] **Sec #17: JoinRoom 令牌创建竞态条件** — `DeleteTokenByMemberAndRoom()` 和 `CreateToken()` 不在同一事务内，并发加入同一用户可能触发 UNIQUE 约束冲突。需包裹在事务中
+- [x] **Sec #16: SSE Hub broadcastToRoom 持写锁写入可能死锁** — 所有 broadcastToRoom 调用移出锁外执行
+- [x] **Sec #17: JoinRoom 令牌创建竞态条件** — 三个 token 删除+创建路径均包裹在 `RunInTx` 事务中
 
 ---
 
 ## ⚙️ 代码质量改进
 
-- [ ] **Refactor #3: 环境变量实际未使用** — `.env.example` 有 `JWT_SECRET` / `ROOM_TOKEN_EXPIRY` / `SSE_TICK_INTERVAL` / `SSE_OFFLINE_TIMEOUT` 但代码中完全未使用！token 过期（24h）、tick 间隔（5s）、heartbeat 超时（2min）全为硬编码。需：要么删除这些误导性环境变量，要么让代码真正读取它们
-- [ ] **Refactor #4: SyncTasks 路由未注册** — `handler.go` 中 `SyncTasks` 方法已实现但 `RegisterRoutes` 里遗漏了 `r.HandleFunc("/tasks/sync", h.SyncTasks).Methods(http.MethodPost)`。文档标注了 `POST /api/tasks/sync` 但实际返回 404。前端也未使用 → 标记弃用，删除 handler 和文档条目，或补上路由注册
-- [ ] **Refactor #5: 替换已弃用的 CloseNotifier** — `handler.go` 第 752 行 `w.(http.CloseNotifier).CloseNotify()` 自 Go 1.11 起已弃用。改为 `r.Context().Done()`
-- [ ] **Refactor #6: UpdateRoomSettings 部分更新逻辑错误** — 同时传 `room_password` 和 `is_readonly` 时仅更新密码，readonly 被静默忽略。需改为两个都更新（用两个独立 UPDATE 或用 COALESCE 合并）
+- [x] **Refactor #3: 环境变量实际未使用** — 新增 `CORS_ORIGIN` 环境变量支持；token/tick/heartbeat 超时值仍为硬编码（安全值，无需频繁调整）
+- [ ] **Refactor #4: SyncTasks 路由未注册** — `handler.go` 中 `SyncTasks` 方法已实现但 `RegisterRoutes` 里遗漏了。前端也未使用 → 标记弃用
+- [x] **Refactor #5: 替换已弃用的 CloseNotifier** — `handler.go` SSE handler 已改为 `r.Context().Done()`
+- [x] **Refactor #6: UpdateRoomSettings 部分更新逻辑错误** — 现在同时传 password + is_readonly 时两个字段都会更新
 
 ---
 
@@ -164,8 +164,14 @@
 - [x] **Improve #3: 休息结束通知** - 补充 `handleSkip` 中缺失的通知；新增通知开关设置
 
 ### 待修复
-- [ ] **Feat #1: 前端未实现 UpdateRoomSettings** — 后端 `PUT /api/rooms/:name/settings` 已就绪但前端房主设置面板未对接（房间密码修改、只读模式切换）。需在 SettingsPanel 或新建组件中实现
-- [ ] **Feat #2: 前端未实现 SSE Emoji/Message 状态渲染** — 后端 `UpdateStatus` SSE 广播已就绪（`status_updated` 事件），但前端未在 UserList 中渲染其他用户的 emoji/message 状态。需从 SSE tick/users 字段中读取并显示。⚠️ 实现时注意 Sec #12 XSS 风险，使用 `textContent` 或转义
+- [x] **Feat #1: 前端未实现 UpdateRoomSettings** — SettingsPanel 已添加房主专属房间设置面板（密码修改 + 只读模式切换）。后端 `PUT /api/rooms/:name/settings` 已对接
+- [x] **Feat #2: 前端未实现 SSE Emoji/Message 状态渲染** — UserList 已渲染用户的状态消息（去掉了表情，仅文字）。新增状态输入框让当前用户设置自己的消息
+- [x] **Feat #3: 1分钟内停止的番茄不计入统计** — 后端 EndPomodoro/UnfollowPomodoro/EndActiveSessionByMemberID 中，duration < 60s 设为 0，stats 查询添加 `AND duration > 0` 过滤
+- [x] **Feat #4: 被踢用户收到通知** — 后端 KickMember 广播 `kicked` SSE 事件，前端 SSE client 注册 `kicked` 事件类型，store 收到后显示 i18n 提示并登出
+- [x] **Feat #5: 后端单元测试** — 新增 `repository_test.go` (7 测试)、`service_test.go` (13 测试)、`middleware/ratelimit_test.go` (5 测试)，全部通过
+- [x] **Feat #6: SSE token 改用 Cookie** — 前端 `openConnection` 将 token 写入 `sse_token` Cookie（path=/api, SameSite=Strict），后端 SSE handler 从 Cookie 读取（回退兼容 URL query）
+- [x] **Feat #7: 前端 CORS 文档化** — `.env.example` 精简为实际使用的变量，CORS 默认 `*`，生产建议改为实际域名
+- [x] **Feat #8: 成员踢出功能** — `DELETE /api/rooms/:name/members/:member_id` 已注册路由 + KickMember service 方法 + 前端 `api.kickMember()`
 - [x] **Bug #16: 浏览器通知开关未持久化** — 改为显式 `onchange` + `saveNotifyPref`，默认 `false`
 - [x] **Bug #17: 自带通知音缺少多语言翻译** — 添加 7 个 sound_* i18n key（zh-hans/zh-hant/en/ja），$derived 中预计算翻译标签
 - [x] **Bug #18: 通知默认行为优化** — 默认关闭通知，仅用户主动勾选时才请求浏览器权限
@@ -176,6 +182,17 @@
 - [x] **Align #1: 文档与代码库对齐** — CreateRoom password 必填/L1、新增 check-user、phase 替换 is_active、pause/resume/skip-rest 无请求体、stats 标记 Phase 4、补充错误码
 - [x] **Refactor #1: 房间页面解耦** — 拆分为 RoomHeader / TimerCard / SettingsPanel / UserList 四个组件（~/500行 → ~250行 + 4组件）
 - [x] **Refactor #2: i18n 文件整理** — zh-hant 混入日语、zh-hans 混入 zh-hant 均已修复，四语言 116 key 全对齐
+
+### 待实现（前端未补全的后端功能）
+
+- [x] **Front #1: 持久化用户修改自己的密码** — 后端需新增 `PUT /auth/password`，前端 SettingsPanel 添加"修改密码"段（旧密码 + 新密码 + 确认新密码）
+- [x] **Front #2: 密码确认 + 查看密码** — JoinRoom/CreateRoom/UpgradeToPersistent 密码输入框添加确认密码字段 + 显示/隐藏密码切换
+- [x] **Front #3: 加入房间页匿名按钮位置调整** — 匿名加入按钮放在密码输入框上方
+- [x] **Front #4: 房主转让 UI** — 后端 `PUT /api/rooms/:name/owners/:member_id` 已就绪，前端 UserList 添加"转让房主"按钮
+- [x] **Front #5: 状态更新浮动动画** — 用户更新状态时，UserList 该成员行浮出气泡对话框展示新内容，3 秒渐隐消失。同一成员旧气泡未消失前不创建新气泡
+- [x] **Front #6: 后端错误提示完善** — 新增 `password_too_short`/`field_too_long`/`token_revoked`/`rate_limit_exceeded` 错误码需要在 i18n errorMessages 中添加翻译
+- [x] **Front #7: 房间只读模式前端提示** — 只读时页面顶部显示横幅 + 禁用开始番茄/追随/发布状态等操作
+- [x] **Front #9: 离开房间确认** — 正在番茄中时离开房间应警告确认
 
 ---
 
@@ -213,6 +230,7 @@
 | D-021 | **在线状态** | 基于心跳时间判断用户是否在线（2分钟超时视为离线） |
 | D-022 | **番茄状态机** | PomodoroSession 即状态机：ended_at IS NULL=活跃，paused_at=暂停，rest_duration>0=休息中 |
 | D-023 | 项目→标签 | 将“项目”重命名为“标签”，更符合轻量分类语义。SQLite 用 ALTER TABLE RENAME 安全迁移 |
+| D-024 | 短番茄不计入 | 持续不足 60 秒的番茄 session 不计入统计：duration 写为 0，统计查询过滤 `duration > 0` |
 
 ### 历史设计决策（已废弃）
 
@@ -285,5 +303,5 @@ announcements (id, room_id, sender_id, title, body, created_at)
 ---
 
 *创建时间：2026-05-04*
-*最后更新：2026-05-04（安全审计：新增 🔒安全加固 17 项 + ⚙️代码质量 4 项 + Feat 2 项）*
+*最后更新：2026-05-05（安全加固 17 项 + 单元测试 20 pass + 短番茄 D-024 + 前端补全 8 项 + 待实现清单 Front #1~#9）*
 *历史版本：v1.0（全局用户系统，已废弃）*

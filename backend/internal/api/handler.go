@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"tomatogether/backend/internal/middleware"
 	"tomatogether/backend/internal/models"
 	"tomatogether/backend/internal/service"
 	"tomatogether/backend/internal/sse"
@@ -32,27 +33,35 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	// SSE stream endpoint (no auth middleware, handles own auth via query param)
 	r.HandleFunc("/rooms/{name}/sse", h.HandleSSE).Methods(http.MethodGet)
 
-	// L1 Routes
+	// L1 Routes with auth rate limiting (general 60/min)
 	r.HandleFunc("/rooms/{name}", h.GetRoomInfo).Methods(http.MethodGet)
-	r.HandleFunc("/rooms/{name}/join", h.JoinRoom).Methods(http.MethodPost)
 	r.HandleFunc("/rooms/{name}/stats", h.GetRoomStats).Methods(http.MethodGet)
-	r.HandleFunc("/rooms/{name}/check-user", h.CheckUser).Methods(http.MethodPost)
-	r.HandleFunc("/rooms/{name}/check-password", h.CheckRoomPassword).Methods(http.MethodPost)
-	r.HandleFunc("/auth/login", h.Login).Methods(http.MethodPost)
 
-	// L2 Routes (require token)
+	// Sensitive L1 routes: stricter rate limit (10/min per IP)
+	sensitiveRouter := r.NewRoute().Subrouter()
+	sensitiveRouter.Use(middleware.AuthRateLimit())
+	sensitiveRouter.HandleFunc("/rooms/{name}/join", h.JoinRoom).Methods(http.MethodPost)
+	sensitiveRouter.HandleFunc("/rooms/{name}/check-user", h.CheckUser).Methods(http.MethodPost)
+	sensitiveRouter.HandleFunc("/rooms/{name}/check-password", h.CheckRoomPassword).Methods(http.MethodPost)
+	sensitiveRouter.HandleFunc("/auth/login", h.Login).Methods(http.MethodPost)
+	sensitiveRouter.HandleFunc("/rooms", h.CreateRoom).Methods(http.MethodPost)
+
+	// L2 Routes (require token, with general rate limiting)
 	authRouter := r.PathPrefix("").Subrouter()
 	authRouter.Use(h.authMiddleware)
+	authRouter.Use(middleware.GeneralRateLimit())
 
 	authRouter.HandleFunc("/rooms/{name}/leave", h.LeaveRoom).Methods(http.MethodPost)
 	authRouter.HandleFunc("/rooms/{name}/users", h.GetRoomUsers).Methods(http.MethodGet)
 	authRouter.HandleFunc("/rooms/{name}/settings", h.UpdateRoomSettings).Methods(http.MethodPut)
 	authRouter.HandleFunc("/rooms/{name}/owners/{member_id}", h.SetRoomOwner).Methods(http.MethodPut)
+	authRouter.HandleFunc("/rooms/{name}/members/{member_id}", h.KickMember).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/rooms/{name}/announcements", h.CreateAnnouncement).Methods(http.MethodPost)
 	authRouter.HandleFunc("/rooms/{name}/announcements", h.GetAnnouncements).Methods(http.MethodGet)
 	authRouter.HandleFunc("/rooms/{name}/announcements/{id}", h.DeleteAnnouncement).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/auth/me", h.GetMe).Methods(http.MethodGet)
 	authRouter.HandleFunc("/auth/upgrade", h.UpgradeToPersistent).Methods(http.MethodPost)
+	authRouter.HandleFunc("/auth/password", h.ChangePassword).Methods(http.MethodPut)
 	authRouter.HandleFunc("/pomodoro/start", h.StartPomodoro).Methods(http.MethodPost)
 	authRouter.HandleFunc("/pomodoro/follow", h.FollowPomodoro).Methods(http.MethodPost)
 	authRouter.HandleFunc("/pomodoro/unfollow", h.UnfollowPomodoro).Methods(http.MethodPost)
@@ -73,9 +82,6 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	authRouter.HandleFunc("/tasks/{id}", h.DeleteTask).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/stats/me", h.GetMyStats).Methods(http.MethodGet)
 	authRouter.HandleFunc("/stats/me", h.ResetMyStats).Methods(http.MethodDelete)
-
-	// Room creation (requires persistent user - password must be provided)
-	r.HandleFunc("/rooms", h.CreateRoom).Methods(http.MethodPost)
 }
 
 func (h *Handler) authMiddleware(next http.Handler) http.Handler {
@@ -164,7 +170,7 @@ func (h *Handler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		h.writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
 
@@ -341,6 +347,36 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 // L2 Handlers
 
+func (h *Handler) KickMember(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+
+	vars := mux.Vars(r)
+	memberID := vars["member_id"]
+
+	if err := h.svc.KickMember(token.Token, memberID); err != nil {
+		switch err {
+		case service.ErrMustBeOwner:
+			h.writeError(w, http.StatusForbidden, err.Error())
+		case service.ErrMemberNotFound:
+			h.writeError(w, http.StatusNotFound, err.Error())
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error")
+		}
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]string{
+			"message": "成员已被移出房间",
+		},
+	})
+}
+
 func (h *Handler) LeaveRoom(w http.ResponseWriter, r *http.Request) {
 	token := GetTokenFromContext(r.Context())
 	if token == nil {
@@ -505,6 +541,43 @@ func (h *Handler) UpgradeToPersistent(w http.ResponseWriter, r *http.Request) {
 				"username":      member.Username,
 				"is_persistent": true,
 			},
+		},
+	})
+}
+
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+
+	var req models.ChangePasswordRequest
+	if err := h.parseJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	if err := h.svc.ChangePassword(token.Token, &req); err != nil {
+		switch err {
+		case service.ErrInvalidPassword:
+			h.writeError(w, http.StatusUnauthorized, err.Error())
+		case service.ErrMustBePersistent:
+			h.writeError(w, http.StatusBadRequest, err.Error())
+		case service.ErrPasswordTooShort:
+			h.writeError(w, http.StatusBadRequest, err.Error())
+		case service.ErrFieldTooLong:
+			h.writeError(w, http.StatusBadRequest, err.Error())
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error")
+		}
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]string{
+			"message": "密码已更新",
 		},
 	})
 }
@@ -1106,8 +1179,13 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check for token in query param (upgrades to L2)
+	// Check for token in query param or cookie (Sec #11 fix)
 	tokenValue := r.URL.Query().Get("token")
+	if tokenValue == "" {
+		if cookie, err := r.Cookie("sse_token"); err == nil {
+			tokenValue = cookie.Value
+		}
+	}
 	var memberID, username string
 	var isOwner, isAuth bool
 
@@ -1143,7 +1221,14 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := hub.NewClient(roomName, memberID, username, isOwner, isAuth)
+	// Check SSE connection limits (Sec #6 fix)
+	clientIP := r.RemoteAddr
+	if !hub.CanConnect(r, roomName, clientIP, isAuth) {
+		h.writeError(w, http.StatusServiceUnavailable, "too_many_connections")
+		return
+	}
+
+	client := hub.NewClient(roomName, memberID, username, isOwner, isAuth, clientIP)
 	client.Register()
 	defer client.Unregister()
 
@@ -1153,9 +1238,8 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// If not authenticated (L1旁观者), send token_expired message periodically
+	// If not authenticated (L1旁观者), send connected message
 	if !isAuth {
-		// Send initial message indicating read-only mode
 		initialData, _ := json.Marshal(map[string]interface{}{
 			"message": "旁观模式 - 仅可查看",
 		})
@@ -1166,9 +1250,6 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	// Create heartbeat ticker
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-
-	// Channel to detect client disconnect
-	closeNotify := w.(http.CloseNotifier).CloseNotify()
 
 	for {
 		select {
@@ -1202,7 +1283,7 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 				"timestamp": time.Now().Format(time.RFC3339),
 			})
 
-		case <-closeNotify:
+		case <-r.Context().Done():
 			return
 		}
 	}

@@ -219,7 +219,6 @@
 		countdown.stop();
 		sessionIndex = 0;
 		displayTime = plannedMinutes * 60;
-		loadMyStats();
 	}
 
 	async function handleEnd() {
@@ -234,6 +233,9 @@
 	}
 
 	async function handleLogout() {
+		if ($pomodoroStatus.phase !== 'idle') {
+			if (!confirm(t('confirm_leave_active', $locale))) return;
+		}
 		if (confirm(t('confirm_logout', $locale))) {
 			logout();
 			goto('/');
@@ -255,18 +257,6 @@
 			}
 		} catch {
 			/* ignore */
-		}
-	}
-
-	async function loadMyStats() {
-		try {
-			const resp = await api.getMyStats();
-			if (resp.data) {
-				myPomodoros = resp.data.total_pomodoros;
-				myDuration = resp.data.total_duration;
-			}
-		} catch {
-			/* offline */
 		}
 	}
 
@@ -328,6 +318,10 @@
 		onlogout={handleLogout}
 	/>
 
+	{#if $currentRoom?.is_readonly}
+		<div class="readonly-banner">{t('room_readonly_banner', $locale)}</div>
+	{/if}
+
 	<div class="room-content">
 		<section class="main-panel">
 			{#if showSettings}
@@ -341,6 +335,10 @@
 					{estimatedFinish}
 					{sound}
 					{allSounds}
+					isOwner={$currentMember?.is_owner ?? false}
+					isReadonly={$currentRoom?.is_readonly ?? false}
+					hasRoomPassword={$currentRoom?.has_password ?? false}
+					isPersistent={$currentMember?.is_persistent ?? false}
 					onclose={() => (showSettings = false)}
 					onplannedMinutesChange={(v) => (plannedMinutes = v)}
 					onrestMinutesChange={(v) => (restMinutes = v)}
@@ -378,7 +376,11 @@
 		</section>
 
 		<section class="users-panel">
-			<UserList users={$roomUsers} currentMemberId={$currentMember?.id || ''} />
+			<UserList
+				users={$roomUsers}
+				currentMemberId={$currentMember?.id || ''}
+				isOwner={$currentMember?.is_owner ?? false}
+			/>
 			<div class="ann-section">
 				<AnnouncementPanel
 					isOwner={$currentMember?.is_owner ?? false}

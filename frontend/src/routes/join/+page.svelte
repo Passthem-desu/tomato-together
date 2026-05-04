@@ -16,6 +16,8 @@
 	let userExists = $state(false);
 	let userIsPersistent = $state(false);
 	let checkingUser = $state(false);
+	let showUserPassword = $state(false);
+	let userPasswordConfirm = $state('');
 
 	$effect(() => {
 		const _step = step;
@@ -349,25 +351,53 @@
 				</button>
 			</form>
 		{:else if step === 'create_user'}
-			<div class="new-user-notice">
-				<span class="user-avatar">🆕</span>
-				<span>{t('new_user', $locale)}</span>
-			</div>
-
 			<form
 				onsubmit={(e) => {
 					e.preventDefault();
 					handleCreateUser();
 				}}
 			>
+				<!-- Anonymous join button first (above password) -->
+				<button
+					class="btn-secondary btn-full"
+					type="button"
+					onclick={handleAnonymousJoin}
+					disabled={$isLoading}
+				>
+					{t('join_anonymous', $locale)}
+				</button>
+
+				<div class="divider"><span>{t('or_set_password', $locale)}</span></div>
+
 				<div class="form-group">
 					<label for="userPassword">{t('set_password', $locale)}</label>
-					<input
-						id="userPassword"
-						type="password"
-						bind:value={userPassword}
-						placeholder={t('password_placeholder', $locale)}
-					/>
+					<div class="password-wrapper">
+						<input
+							id="userPassword"
+							type={showUserPassword ? 'text' : 'password'}
+							bind:value={userPassword}
+							placeholder={t('password_placeholder', $locale)}
+						/>
+						<button
+							type="button"
+							class="btn-eye"
+							onclick={() => (showUserPassword = !showUserPassword)}
+						>
+							{showUserPassword ? '🙈' : '👁'}
+						</button>
+					</div>
+					{#if userPassword}
+						<div class="form-group" style="margin-top:0.5rem">
+							<label for="userPasswordConfirm">{t('confirm_password', $locale)}</label
+							>
+							<input
+								id="userPasswordConfirm"
+								type="password"
+								bind:value={userPasswordConfirm}
+								placeholder={t('confirm_password_placeholder', $locale)}
+							/>
+						</div>
+					{/if}
 					<span class="form-hint">{t('persistent_hint', $locale)}</span>
 				</div>
 
@@ -376,21 +406,16 @@
 				{/if}
 
 				{#if userPassword}
-					<button class="btn-primary btn-full" type="submit" disabled={$isLoading}>
+					<button
+						class="btn-primary btn-full"
+						type="submit"
+						disabled={$isLoading || userPassword !== userPasswordConfirm}
+					>
 						{#if $isLoading}
 							<span class="spinner"></span>
 						{:else}
 							{t('join_room', $locale)}
 						{/if}
-					</button>
-				{:else}
-					<button
-						class="btn-secondary btn-full"
-						type="button"
-						onclick={handleAnonymousJoin}
-						disabled={$isLoading}
-					>
-						{t('join_anonymous', $locale)}
 					</button>
 				{/if}
 			</form>
@@ -502,6 +527,40 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	.password-wrapper {
+		position: relative;
+	}
+	.password-wrapper input {
+		padding-right: 2.5rem;
+	}
+	.btn-eye {
+		position: absolute;
+		right: 0.25rem;
+		top: 50%;
+		transform: translateY(-50%);
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0.5rem;
+		font-size: 1rem;
+	}
+	.divider {
+		display: flex;
+		align-items: center;
+		margin: 1rem 0;
+		color: var(--color-fg-muted);
+		font-size: var(--text-xs);
+	}
+	.divider::before,
+	.divider::after {
+		content: '';
+		flex: 1;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.divider span {
+		padding: 0 0.75rem;
 	}
 
 	@media (max-width: 640px) {

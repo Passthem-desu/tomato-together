@@ -14,7 +14,8 @@ export type SSEEventType =
 	| 'status_updated'
 	| 'announcement'
 	| 'token_expired'
-	| 'phase_changed';
+	| 'phase_changed'
+	| 'kicked';
 
 export interface TickUser {
 	id: string;
@@ -44,6 +45,7 @@ const EVENT_TYPES: SSEEventType[] = [
 	'announcement',
 	'token_expired',
 	'phase_changed',
+	'kicked',
 ];
 
 const WATCHDOG_INTERVAL = 3000; // check every 3s
@@ -80,6 +82,8 @@ export class SSEClient {
 		this.stopWatchdog();
 		clearTimeout(this.reconnectTimer!);
 		this.reconnectTimer = null;
+		// Clear the SSE token cookie
+		document.cookie = 'sse_token=; path=/api; max-age=0; SameSite=Strict';
 		if (this.source) {
 			this.source.close();
 			this.source = null;
@@ -98,9 +102,12 @@ export class SSEClient {
 	private openConnection(): void {
 		if (this.closed) return;
 
-		const url = this.token
-			? `/api/rooms/${encodeURIComponent(this.roomName)}/sse?token=${encodeURIComponent(this.token)}`
-			: `/api/rooms/${encodeURIComponent(this.roomName)}/sse`;
+		// Set token as cookie for SSE auth (avoids token in URL, Sec #11 fix)
+		if (this.token) {
+			document.cookie = `sse_token=${encodeURIComponent(this.token)}; path=/api; max-age=86400; SameSite=Strict`;
+		}
+
+		const url = `/api/rooms/${encodeURIComponent(this.roomName)}/sse`;
 
 		const es = new EventSource(url);
 		this.source = es;

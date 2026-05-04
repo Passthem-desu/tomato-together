@@ -11,6 +11,8 @@
 	let roomPassword = $state('');
 	let username = $state('');
 	let userPassword = $state('');
+	let showPassword = $state(false);
+	let userPasswordConfirm = $state('');
 
 	onMount(() => {
 		error.set(null);
@@ -160,13 +162,32 @@
 
 				<div class="form-group">
 					<label for="userPassword">{t('set_password', $locale)}</label>
-					<input
-						id="userPassword"
-						type="password"
-						bind:value={userPassword}
-						placeholder={t('password_placeholder', $locale)}
-						required
-					/>
+					<div class="password-wrapper">
+						<input
+							id="userPassword"
+							type={showPassword ? 'text' : 'password'}
+							bind:value={userPassword}
+							placeholder={t('password_placeholder', $locale)}
+							required
+						/>
+						<button
+							type="button"
+							class="btn-eye"
+							onclick={() => (showPassword = !showPassword)}
+						>
+							{showPassword ? '🙈' : '👁'}
+						</button>
+					</div>
+					<div class="form-group" style="margin-top:0.5rem">
+						<label for="userPasswordConfirm">{t('confirm_password', $locale)}</label>
+						<input
+							id="userPasswordConfirm"
+							type="password"
+							bind:value={userPasswordConfirm}
+							placeholder={t('confirm_password_placeholder', $locale)}
+							required
+						/>
+					</div>
 					<span class="form-hint">{t('password_hint', $locale)}</span>
 				</div>
 
@@ -174,7 +195,11 @@
 					<p class="form-error">{$error}</p>
 				{/if}
 
-				<button class="btn-primary btn-full" type="submit" disabled={$isLoading}>
+				<button
+					class="btn-primary btn-full"
+					type="submit"
+					disabled={$isLoading || userPassword !== userPasswordConfirm}
+				>
 					{#if $isLoading}
 						<span class="spinner"></span>
 						{t('loading', $locale)}
@@ -303,6 +328,24 @@
 
 	.form-card button[type='submit'] {
 		margin-top: 0.5rem;
+	}
+
+	.password-wrapper {
+		position: relative;
+	}
+	.password-wrapper input {
+		padding-right: 2.5rem;
+	}
+	.btn-eye {
+		position: absolute;
+		right: 0.25rem;
+		top: 50%;
+		transform: translateY(-50%);
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0.5rem;
+		font-size: 1rem;
 	}
 
 	@media (max-width: 640px) {

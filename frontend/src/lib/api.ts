@@ -205,9 +205,48 @@ export const api = {
 		return apiRequest(`/rooms/${encodeURIComponent(roomName!)}/users`);
 	},
 
+	// Update room settings (owner only)
+	updateRoomSettings: async (data: {
+		room_password?: string;
+		is_readonly?: boolean;
+	}): Promise<{ success: boolean }> => {
+		const roomName = localStorage.getItem('room_name');
+		return apiRequest(`/rooms/${encodeURIComponent(roomName!)}/settings`, {
+			method: 'PUT',
+			body: JSON.stringify(data),
+		});
+	},
+
+	// Kick a member from the room (owner only)
+	kickMember: async (memberId: string): Promise<{ success: boolean }> => {
+		const roomName = localStorage.getItem('room_name');
+		return apiRequest(`/rooms/${encodeURIComponent(roomName!)}/members/${memberId}`, {
+			method: 'DELETE',
+		});
+	},
+
+	// Transfer room ownership (owner only)
+	setOwner: async (memberId: string): Promise<{ success: boolean }> => {
+		const roomName = localStorage.getItem('room_name');
+		return apiRequest(`/rooms/${encodeURIComponent(roomName!)}/owners/${memberId}`, {
+			method: 'PUT',
+			body: JSON.stringify({ is_owner: true }),
+		});
+	},
+
 	// Auth
 	getMe: async (): Promise<{ success: boolean; data: Member }> => {
 		return apiRequest('/auth/me');
+	},
+
+	changePassword: async (data: {
+		old_password: string;
+		new_password: string;
+	}): Promise<{ success: boolean }> => {
+		return apiRequest('/auth/password', {
+			method: 'PUT',
+			body: JSON.stringify(data),
+		});
 	},
 
 	login: async (data: {

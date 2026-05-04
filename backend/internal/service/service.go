@@ -2,6 +2,7 @@ package service
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"log"
@@ -13,6 +14,20 @@ import (
 	"tomatogether/backend/internal/models"
 	"tomatogether/backend/internal/repository"
 	"tomatogether/backend/internal/sse"
+)
+
+// Field length limits
+const (
+	MaxUsernameLen       = 30
+	MaxRoomNameLen       = 50
+	MaxPasswordLen       = 128
+	MaxTagNameLen        = 30
+	MaxTaskTitleLen      = 200
+	MaxAnnouncementTitle = 100
+	MaxAnnouncementBody  = 1000
+	MaxEmojiLen          = 10
+	MaxStatusMessageLen  = 200
+	MinPasswordLen       = 6
 )
 
 var (
@@ -31,10 +46,13 @@ var (
 	ErrSessionNotActive     = errors.New("session_not_active")
 	ErrTokenExpired         = errors.New("token_expired")
 	ErrTokenInvalid         = errors.New("token_invalid")
+	ErrTokenRevoked         = errors.New("token_revoked")
 	ErrMustBePersistent     = errors.New("must_be_persistent_user")
 	ErrMustBeOwner          = errors.New("must_be_owner")
 	ErrTagNotFound          = errors.New("tag_not_found")
 	ErrTaskNotFound         = errors.New("task_not_found")
+	ErrPasswordTooShort     = errors.New("password_too_short")
+	ErrFieldTooLong         = errors.New("field_too_long")
 )
 
 type Service struct {
@@ -51,6 +69,20 @@ const tokenExpiry = 24 * time.Hour
 // Room operations
 
 func (s *Service) CreateRoom(req *models.CreateRoomRequest) (*models.RoomResponse, error) {
+	// Validate input lengths
+	if len(req.RoomName) > MaxRoomNameLen {
+		return nil, ErrFieldTooLong
+	}
+	if len(req.Username) > MaxUsernameLen {
+		return nil, ErrFieldTooLong
+	}
+	if req.Password != "" && len(req.Password) < MinPasswordLen {
+		return nil, ErrPasswordTooShort
+	}
+	if len(req.Password) > MaxPasswordLen {
+		return nil, ErrFieldTooLong
+	}
+
 	// Check if room name is taken
 	_, err := s.repo.GetRoomByName(req.RoomName)
 	if err == nil {
@@ -147,6 +179,17 @@ func (s *Service) CreateRoom(req *models.CreateRoomRequest) (*models.RoomRespons
 }
 
 func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*models.RoomResponse, error) {
+	// Validate input lengths
+	if len(req.Username) > MaxUsernameLen {
+		return nil, ErrFieldTooLong
+	}
+	if req.Password != "" && len(req.Password) < MinPasswordLen {
+		return nil, ErrPasswordTooShort
+	}
+	if len(req.Password) > MaxPasswordLen {
+		return nil, ErrFieldTooLong
+	}
+
 	// Get room
 	room, err := s.repo.GetRoomByName(roomName)
 	if err != nil {
@@ -179,8 +222,7 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 			if err != nil {
 				return nil, err
 			}
-			// Delete existing token if any (due to UNIQUE constraint)
-			s.repo.DeleteTokenByMemberAndRoom(existingMember.ID, room.ID)
+			// Delete existing token and create new in transaction (Sec #17 fix)
 			token := &models.RoomToken{
 				ID:            uuid.New().String(),
 				MemberID:      existingMember.ID,
@@ -190,7 +232,13 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 				ExpiresAt:     time.Now().Add(tokenExpiry),
 				LastHeartbeat: time.Now(),
 			}
-			if err := s.repo.CreateToken(token); err != nil {
+			err = s.repo.RunInTx(func(tx *sql.Tx) error {
+				if err := s.repo.DeleteTokenByMemberAndRoomInTx(tx, existingMember.ID, room.ID); err != nil {
+					return err
+				}
+				return s.repo.CreateTokenInTx(tx, token)
+			})
+			if err != nil {
 				return nil, err
 			}
 			return &models.RoomResponse{
@@ -211,8 +259,7 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 		} else {
 			// Existing anonymous user - allow re-join and inherit data
 			if req.Password == "" {
-				// Both old and new are anonymous - allow re-use
-				s.repo.DeleteTokenByMemberAndRoom(existingMember.ID, room.ID)
+				// Both old and new are anonymous - allow re-use (Sec #17: wrapped in transaction)
 				tokenValue, err := generateToken()
 				if err != nil {
 					return nil, err
@@ -226,7 +273,13 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 					ExpiresAt:     time.Now().Add(tokenExpiry),
 					LastHeartbeat: time.Now(),
 				}
-				if err := s.repo.CreateToken(token); err != nil {
+				err = s.repo.RunInTx(func(tx *sql.Tx) error {
+					if err := s.repo.DeleteTokenByMemberAndRoomInTx(tx, existingMember.ID, room.ID); err != nil {
+						return err
+					}
+					return s.repo.CreateTokenInTx(tx, token)
+				})
+				if err != nil {
 					return nil, err
 				}
 				return &models.RoomResponse{
@@ -245,13 +298,11 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 					Token: token.Token,
 				}, nil
 			} else {
-				// New request has password, old is anonymous - upgrade to persistent
+				// New request has password, old is anonymous - upgrade to persistent (Sec #17: wrapped in transaction)
 				hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 				if err != nil {
 					return nil, err
 				}
-				s.repo.UpdateMemberPassword(existingMember.ID, string(hash))
-				s.repo.DeleteTokenByMemberAndRoom(existingMember.ID, room.ID)
 				tokenValue, err := generateToken()
 				if err != nil {
 					return nil, err
@@ -265,7 +316,16 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 					ExpiresAt:     time.Now().Add(tokenExpiry),
 					LastHeartbeat: time.Now(),
 				}
-				if err := s.repo.CreateToken(token); err != nil {
+				err = s.repo.RunInTx(func(tx *sql.Tx) error {
+					if err := s.repo.UpdateMemberPasswordInTx(tx, existingMember.ID, string(hash)); err != nil {
+						return err
+					}
+					if err := s.repo.DeleteTokenByMemberAndRoomInTx(tx, existingMember.ID, room.ID); err != nil {
+						return err
+					}
+					return s.repo.CreateTokenInTx(tx, token)
+				})
+				if err != nil {
 					return nil, err
 				}
 				return &models.RoomResponse{
@@ -589,6 +649,13 @@ func (s *Service) GetMe(tokenValue string) (*models.RoomMember, error) {
 }
 
 func (s *Service) UpgradeToPersistent(tokenValue string, req *models.UpgradeRequest) error {
+	if len(req.Password) < MinPasswordLen {
+		return ErrPasswordTooShort
+	}
+	if len(req.Password) > MaxPasswordLen {
+		return ErrFieldTooLong
+	}
+
 	token, err := s.ValidateToken(tokenValue)
 	if err != nil {
 		return err
@@ -602,7 +669,48 @@ func (s *Service) UpgradeToPersistent(tokenValue string, req *models.UpgradeRequ
 	return s.repo.UpdateMemberPassword(token.MemberID, string(hash))
 }
 
+func (s *Service) ChangePassword(tokenValue string, req *models.ChangePasswordRequest) error {
+	if len(req.NewPassword) < MinPasswordLen {
+		return ErrPasswordTooShort
+	}
+	if len(req.NewPassword) > MaxPasswordLen {
+		return ErrFieldTooLong
+	}
+
+	token, err := s.ValidateToken(tokenValue)
+	if err != nil {
+		return err
+	}
+
+	member, err := s.repo.GetMemberByID(token.MemberID)
+	if err != nil {
+		return err
+	}
+
+	// Must be a persistent user (have existing password)
+	if member.PasswordHash == "" {
+		return ErrMustBePersistent
+	}
+
+	// Verify old password
+	if !checkPassword(req.OldPassword, member.PasswordHash) {
+		return ErrInvalidPassword
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.UpdateMemberPassword(token.MemberID, string(hash))
+}
+
 func (s *Service) Login(req *models.LoginRequest) (*models.RoomResponse, error) {
+	// Validate input
+	if len(req.Username) > MaxUsernameLen {
+		return nil, ErrFieldTooLong
+	}
+
 	// Get room
 	room, err := s.repo.GetRoomByName(req.RoomName)
 	if err != nil {
@@ -807,6 +915,9 @@ func (s *Service) UnfollowPomodoro(tokenValue string, req *models.FollowRoomRequ
 	// End the session
 	now := time.Now()
 	duration := int(now.Sub(session.StartedAt).Seconds())
+	if duration < 60 {
+		duration = 0 // Don't count sessions stopped within 1 minute
+	}
 	if err := s.repo.UpdatePomodoroSession(session.ID, &now, duration); err != nil {
 		return "", err
 	}
@@ -857,15 +968,19 @@ func (s *Service) EndPomodoro(tokenValue string, req *models.EndPomodoroRequest)
 	duration := int(now.Sub(session.StartedAt).Seconds())
 
 	if req.Aborted {
-		// Abort: end session, no rest
-		if err := s.repo.UpdatePomodoroSession(session.ID, &now, duration); err != nil {
+		// Don't count sessions stopped within 1 minute (accidental start)
+		recordedDuration := duration
+		if duration < 60 {
+			recordedDuration = 0
+		}
+		if err := s.repo.UpdatePomodoroSession(session.ID, &now, recordedDuration); err != nil {
 			return nil, err
 		}
-		go s.broadcastPomodoroEnded(token.RoomID, token.MemberID, session.ID, duration, "aborted")
+		go s.broadcastPomodoroEnded(token.RoomID, token.MemberID, session.ID, recordedDuration, "aborted")
 		return &models.PomodoroStatusResponse{
 			Phase:             "idle",
 			SessionID:         session.ID,
-			Duration:          duration,
+			Duration:          recordedDuration,
 			PlannedDuration:   session.PlannedDuration,
 			SessionsCompleted: sessionsCompleted,
 		}, nil
@@ -1037,9 +1152,25 @@ func (s *Service) SkipRest(tokenValue string) error {
 // Status operations
 
 func (s *Service) UpdateStatus(tokenValue string, req *models.UpdateStatusRequest) (*models.UserStatus, error) {
+	if len(req.Emoji) > MaxEmojiLen {
+		return nil, ErrFieldTooLong
+	}
+	if len(req.Message) > MaxStatusMessageLen {
+		return nil, ErrFieldTooLong
+	}
+
 	token, err := s.ValidateToken(tokenValue)
 	if err != nil {
 		return nil, err
+	}
+
+	// Empty emoji and empty message = clear status
+	if req.Emoji == "" && req.Message == "" {
+		if err := s.repo.DeleteUserStatus(token.MemberID, token.RoomID); err != nil {
+			return nil, err
+		}
+		go s.broadcastStatusUpdated(token.RoomID, token.MemberID, "", "")
+		return nil, nil
 	}
 
 	status := &models.UserStatus{
@@ -1078,6 +1209,12 @@ func (s *Service) ValidateToken(tokenValue string) (*models.RoomToken, error) {
 		return nil, ErrTokenInvalid
 	}
 
+	// Check if token has been revoked
+	revoked, err := s.repo.IsTokenRevoked(tokenValue)
+	if err == nil && revoked {
+		return nil, ErrTokenRevoked
+	}
+
 	if time.Now().After(token.ExpiresAt) {
 		return nil, ErrTokenExpired
 	}
@@ -1101,6 +1238,9 @@ func (s *Service) GetTags(memberID, roomID string) ([]*models.Tag, error) {
 }
 
 func (s *Service) CreateTag(memberID, roomID, name string) (*models.Tag, error) {
+	if len(name) > MaxTagNameLen {
+		return nil, ErrFieldTooLong
+	}
 	tag := &models.Tag{
 		ID:        uuid.New().String(),
 		MemberID:  memberID,
@@ -1137,6 +1277,9 @@ func (s *Service) GetTasks(memberID, roomID, status string) ([]*models.Task, err
 }
 
 func (s *Service) CreateTask(memberID, roomID, clientID, title, tagID string) (*models.Task, error) {
+	if len(title) > MaxTaskTitleLen {
+		return nil, ErrFieldTooLong
+	}
 	task := &models.Task{
 		ID:        uuid.New().String(),
 		ClientID:  clientID,
@@ -1204,9 +1347,26 @@ func (s *Service) SyncTasks(memberID, roomID string, tasks []models.SyncTaskItem
 // Announcement operations
 
 func (s *Service) CreateAnnouncement(roomName, senderID, title, body string) (*models.Announcement, error) {
+	// Validate field lengths
+	if len(title) > MaxAnnouncementTitle {
+		return nil, ErrFieldTooLong
+	}
+	if len(body) > MaxAnnouncementBody {
+		return nil, ErrFieldTooLong
+	}
+
 	room, err := s.repo.GetRoomByName(roomName)
 	if err != nil {
 		return nil, ErrRoomNotFound
+	}
+
+	// Verify sender is the room owner (Sec #1 fix)
+	member, err := s.repo.GetMemberByID(senderID)
+	if err != nil {
+		return nil, ErrMemberNotFound
+	}
+	if !member.IsOwner {
+		return nil, ErrMustBeOwner
 	}
 
 	announcement := &models.Announcement{
@@ -1420,6 +1580,75 @@ func (s *Service) broadcastStatusUpdated(roomID, memberID, emoji, message string
 	})
 
 	log.Printf("Broadcast status_updated: room=%s, user=%s", room.Name, member.Username)
+}
+
+// KickMember kicks a member from a room (owner only) — Sec #3 fix
+func (s *Service) KickMember(tokenValue, targetMemberID string) error {
+	token, err := s.ValidateToken(tokenValue)
+	if err != nil {
+		return err
+	}
+
+	// Verify requester is owner
+	member, err := s.repo.GetMemberByID(token.MemberID)
+	if err != nil {
+		return err
+	}
+	if !member.IsOwner {
+		return ErrMustBeOwner
+	}
+
+	// Verify target is in the same room
+	target, err := s.repo.GetMemberByID(targetMemberID)
+	if err != nil {
+		return ErrMemberNotFound
+	}
+	if target.RoomID != token.RoomID {
+		return ErrMemberNotFound
+	}
+
+	// Cannot kick yourself
+	if token.MemberID == targetMemberID {
+		return errors.New("cannot_kick_self")
+	}
+
+	// Broadcast kicked event to notify the target before revoking tokens
+	go s.broadcastUserKicked(target.RoomID, targetMemberID, target.Username)
+
+	// End target's active pomodoro session
+	s.repo.EndActiveSessionByMemberID(targetMemberID)
+
+	// Revoke all tokens for target member (find and revoke each)
+	targetToken, err := s.repo.GetTokenByMemberAndRoom(targetMemberID, target.RoomID)
+	if err == nil && targetToken != nil {
+		s.repo.RevokeToken(targetToken.Token)
+	}
+
+	// Delete all tokens for the target member
+	s.repo.DeleteTokensByMemberID(targetMemberID)
+
+	return nil
+}
+
+// CleanupRevocations removes expired token revocation records
+func (s *Service) CleanupRevocations() {
+	s.repo.CleanupExpiredRevocations()
+}
+
+func (s *Service) broadcastUserKicked(roomID, memberID, username string) {
+	hub := sse.GetHub()
+	if hub == nil {
+		return
+	}
+	room, err := s.repo.GetRoomByID(roomID)
+	if err != nil {
+		return
+	}
+	hub.BroadcastEvent(room.Name, "kicked", map[string]interface{}{
+		"user_id":  memberID,
+		"username": username,
+	})
+	log.Printf("Broadcast kicked: room=%s, user=%s", room.Name, username)
 }
 
 func (s *Service) broadcastUserJoined(roomID, memberID string) {

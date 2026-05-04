@@ -13,6 +13,10 @@
 		estimatedFinish: string;
 		sound: SoundManager;
 		allSounds: SoundDef[];
+		isOwner: boolean;
+		isReadonly: boolean;
+		hasRoomPassword: boolean;
+		isPersistent: boolean;
 		onclose: () => void;
 		onplannedMinutesChange: (v: number) => void;
 		onrestMinutesChange: (v: number) => void;
@@ -34,6 +38,10 @@
 		estimatedFinish,
 		sound,
 		allSounds,
+		isOwner,
+		isReadonly,
+		hasRoomPassword,
+		isPersistent,
 		onclose,
 		onplannedMinutesChange,
 		onrestMinutesChange,
@@ -71,6 +79,41 @@
 	let fileInput = $state<HTMLInputElement | null>(null);
 	let showSoundDialog = $state(false);
 	let resetting = $state(false);
+	let roomPassword = $state('');
+	let roomReadonly = $state<boolean>(isReadonly);
+	let roomSettingsSaving = $state(false);
+	let oldPassword = $state('');
+	let newPassword = $state('');
+	let newPasswordConfirm = $state('');
+	let passwordChanging = $state(false);
+
+	async function handleChangePassword() {
+		if (newPassword !== newPasswordConfirm) return;
+		passwordChanging = true;
+		try {
+			await api.changePassword({ old_password: oldPassword, new_password: newPassword });
+			oldPassword = '';
+			newPassword = '';
+			newPasswordConfirm = '';
+		} catch {
+			/* ignore */
+		}
+		passwordChanging = false;
+	}
+
+	async function handleSaveRoomSettings() {
+		roomSettingsSaving = true;
+		try {
+			await api.updateRoomSettings({
+				room_password: roomPassword || undefined,
+				is_readonly: roomReadonly,
+			});
+			roomPassword = '';
+		} catch {
+			/* ignore */
+		}
+		roomSettingsSaving = false;
+	}
 
 	async function handleReset() {
 		if (!confirm(t('reset_confirm', $locale))) return;
@@ -261,6 +304,65 @@
 	<div class="reset-section">
 		<button class="btn-reset" onclick={handleReset}>{t('reset_stats', $locale)}</button>
 	</div>
+
+	{#if isOwner}
+		<h3 class="settings-subtitle">{t('room_settings_title', $locale)}</h3>
+		<div class="room-settings">
+			<div class="setting room-setting">
+				<label>{t('room_password_label', $locale)}</label>
+				<input
+					type="password"
+					placeholder={t('new_password_placeholder', $locale)}
+					bind:value={roomPassword}
+				/>
+			</div>
+			<div class="setting-row">
+				<label class="toggle-label">
+					<input
+						type="checkbox"
+						checked={roomReadonly}
+						onchange={(e) => (roomReadonly = (e.target as HTMLInputElement).checked)}
+					/>
+					<span>{t('readonly_mode', $locale)}</span>
+				</label>
+			</div>
+			<button
+				class="btn-secondary btn-sm"
+				onclick={handleSaveRoomSettings}
+				disabled={roomSettingsSaving}
+			>
+				{t('save_settings', $locale)}
+			</button>
+		</div>
+	{/if}
+
+	{#if isPersistent}
+		<h3 class="settings-subtitle">{t('change_password_title', $locale)}</h3>
+		<div class="room-settings">
+			<div class="setting room-setting">
+				<label>{t('change_old_password', $locale)}</label>
+				<input type="password" bind:value={oldPassword} />
+			</div>
+			<div class="setting room-setting">
+				<label>{t('change_new_password', $locale)}</label>
+				<input type="password" bind:value={newPassword} />
+			</div>
+			<div class="setting room-setting">
+				<label>{t('change_confirm_password', $locale)}</label>
+				<input type="password" bind:value={newPasswordConfirm} />
+			</div>
+			<button
+				class="btn-secondary btn-sm"
+				onclick={handleChangePassword}
+				disabled={passwordChanging ||
+					!oldPassword ||
+					!newPassword ||
+					newPassword !== newPasswordConfirm}
+			>
+				{t('change_password_btn', $locale)}
+			</button>
+		</div>
+	{/if}
 </div>
 
 {#if showSoundDialog}
@@ -451,6 +553,16 @@
 		margin-top: 1.25rem;
 		padding-top: 1rem;
 		border-top: 1px solid var(--color-border);
+	}
+	.room-settings {
+		margin-top: 0.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.room-setting input {
+		width: 200px !important;
+		text-align: left !important;
 	}
 	.btn-reset {
 		padding: 0.4rem 0.9rem;

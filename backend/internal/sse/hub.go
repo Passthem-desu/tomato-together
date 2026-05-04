@@ -4,11 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
 	"tomatogether/backend/internal/models"
 	"tomatogether/backend/internal/repository"
+)
+
+const (
+	maxGlobalConnections  = 500 // max total SSE connections
+	maxPerIPConnections   = 20  // max connections per IP
+	maxL1PerIPConnections = 5   // max unauthenticated connections per IP
 )
 
 // Hub manages all room connections and broadcasts events
@@ -19,6 +26,9 @@ type Hub struct {
 	broadcast  chan *Message
 	mu         sync.RWMutex
 	repo       *repository.Repository
+
+	// Connection tracking per IP
+	connectionsByIP map[string]int
 
 	// Heartbeat configuration
 	heartbeatTimeout time.Duration // 2 minutes
@@ -35,6 +45,7 @@ type Client struct {
 	Username    string
 	IsOwner     bool
 	IsAuth      bool // has L2 token
+	IP          string
 	notify      chan []byte
 	hub         *Hub
 	connectedAt time.Time
@@ -53,11 +64,12 @@ var globalHub *Hub
 // NewHub creates a new Hub instance
 func NewHub(repo *repository.Repository) *Hub {
 	hub := &Hub{
-		rooms:      make(map[string]map[*Client]bool),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		broadcast:  make(chan *Message, 256),
-		repo:       repo,
+		rooms:           make(map[string]map[*Client]bool),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		broadcast:       make(chan *Message, 256),
+		repo:            repo,
+		connectionsByIP: make(map[string]int),
 
 		heartbeatTimeout: 2 * time.Minute,
 		tickInterval:     5 * time.Second,
@@ -87,16 +99,21 @@ func (h *Hub) Run() {
 				h.rooms[client.RoomName] = make(map[*Client]bool)
 			}
 			h.rooms[client.RoomName][client] = true
+			h.connectionsByIP[client.IP]++
+			shouldBroadcast := client.IsAuth && client.MemberID != ""
+			roomName := client.RoomName
+			memberID := client.MemberID
+			username := client.Username
 			h.mu.Unlock()
 
-			log.Printf("Client registered: room=%s, member=%s", client.RoomName, client.MemberID)
+			log.Printf("Client registered: room=%s, member=%s", roomName, memberID)
 
-			// Broadcast user_joined when authenticated client connects
-			if client.IsAuth && client.MemberID != "" {
-				h.broadcastToRoom(client.RoomName, "user_joined", map[string]interface{}{
+			// Broadcast user_joined when authenticated client connects (outside lock, Sec #16 fix)
+			if shouldBroadcast {
+				h.broadcastToRoom(roomName, "user_joined", map[string]interface{}{
 					"user": map[string]interface{}{
-						"id":        client.MemberID,
-						"username":  client.Username,
+						"id":        memberID,
+						"username":  username,
 						"is_online": true,
 					},
 				})
@@ -104,16 +121,22 @@ func (h *Hub) Run() {
 
 		case client := <-h.unregister:
 			h.mu.Lock()
+			var shouldBroadcast bool
+			var roomName, memberID, username string
 			if clients, ok := h.rooms[client.RoomName]; ok {
 				if _, ok := clients[client]; ok {
 					delete(clients, client)
 					close(client.notify)
+					shouldBroadcast = true
+					roomName = client.RoomName
+					memberID = client.MemberID
+					username = client.Username
 
-					// Notify others that user left
-					h.broadcastToRoom(client.RoomName, "user_left", map[string]interface{}{
-						"user_id":  client.MemberID,
-						"username": client.Username,
-					})
+					// Decrement IP connection counter
+					h.connectionsByIP[client.IP]--
+					if h.connectionsByIP[client.IP] <= 0 {
+						delete(h.connectionsByIP, client.IP)
+					}
 
 					// If last client in room, clean up
 					if len(clients) == 0 {
@@ -123,7 +146,15 @@ func (h *Hub) Run() {
 			}
 			h.mu.Unlock()
 
-			log.Printf("Client unregistered: room=%s, member=%s", client.RoomName, client.MemberID)
+			// Notify others that user left (outside lock, Sec #16 fix)
+			if shouldBroadcast {
+				h.broadcastToRoom(roomName, "user_left", map[string]interface{}{
+					"user_id":  memberID,
+					"username": username,
+				})
+			}
+
+			log.Printf("Client unregistered: room=%s, member=%s", roomName, memberID)
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
@@ -152,14 +183,43 @@ func (h *Hub) Stop() {
 	h.wg.Wait()
 }
 
+// CanConnect checks if a new SSE connection should be allowed
+func (h *Hub) CanConnect(r *http.Request, roomName, clientIP string, isAuth bool) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Global limit
+	totalConnections := 0
+	for _, clients := range h.rooms {
+		totalConnections += len(clients)
+	}
+	if totalConnections >= maxGlobalConnections {
+		return false
+	}
+
+	// Per-IP limit
+	currentIPConns := h.connectionsByIP[clientIP]
+	if currentIPConns >= maxPerIPConnections {
+		return false
+	}
+
+	// Stricter limit for unauthenticated (L1 spectator) connections
+	if !isAuth && currentIPConns >= maxL1PerIPConnections {
+		return false
+	}
+
+	return true
+}
+
 // NewClient creates a new SSE client
-func (h *Hub) NewClient(roomName, memberID, username string, isOwner, isAuth bool) *Client {
+func (h *Hub) NewClient(roomName, memberID, username string, isOwner, isAuth bool, ip string) *Client {
 	return &Client{
 		RoomName:    roomName,
 		MemberID:    memberID,
 		Username:    username,
 		IsOwner:     isOwner,
 		IsAuth:      isAuth,
+		IP:          ip,
 		notify:      make(chan []byte, 256),
 		hub:         h,
 		connectedAt: time.Now(),
@@ -234,6 +294,14 @@ func (h *Hub) runHeartbeatChecker() {
 	for {
 		select {
 		case <-ticker.C:
+			// Collect stale clients first, then broadcast outside lock (Sec #16 fix)
+			type staleInfo struct {
+				roomName string
+				memberID string
+				username string
+			}
+			var staleClients []staleInfo
+
 			h.mu.Lock()
 			for roomName, clients := range h.rooms {
 				for client := range clients {
@@ -242,10 +310,16 @@ func (h *Hub) runHeartbeatChecker() {
 						delete(clients, client)
 						close(client.notify)
 
-						// Notify others
-						h.broadcastToRoom(roomName, "user_left", map[string]interface{}{
-							"user_id":  client.MemberID,
-							"username": client.Username,
+						// Decrement IP connection counter
+						h.connectionsByIP[client.IP]--
+						if h.connectionsByIP[client.IP] <= 0 {
+							delete(h.connectionsByIP, client.IP)
+						}
+
+						staleClients = append(staleClients, staleInfo{
+							roomName: roomName,
+							memberID: client.MemberID,
+							username: client.Username,
 						})
 
 						log.Printf("Client timed out: room=%s, member=%s", roomName, client.MemberID)
@@ -256,6 +330,14 @@ func (h *Hub) runHeartbeatChecker() {
 				}
 			}
 			h.mu.Unlock()
+
+			// Broadcast user_left for stale clients outside lock
+			for _, info := range staleClients {
+				h.broadcastToRoom(info.roomName, "user_left", map[string]interface{}{
+					"user_id":  info.memberID,
+					"username": info.username,
+				})
+			}
 
 		case <-h.stopCh:
 			return

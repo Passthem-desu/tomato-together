@@ -16,6 +16,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"tomatogether/backend/internal/api"
+	"tomatogether/backend/internal/middleware"
 	"tomatogether/backend/internal/repository"
 	"tomatogether/backend/internal/service"
 	"tomatogether/backend/internal/sse"
@@ -38,6 +39,16 @@ func main() {
 		log.Fatal("Failed to open database:", err)
 	}
 	defer db.Close()
+
+	// Enable WAL mode for better concurrent read/write performance
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		log.Printf("Warning: Failed to enable WAL mode: %v", err)
+	}
+
+	// Set busy timeout to reduce "database is locked" errors
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		log.Printf("Warning: Failed to set busy timeout: %v", err)
+	}
 
 	// Run database migrations
 	if err := runMigrations(db); err != nil {
@@ -64,27 +75,40 @@ func main() {
 	}
 	r.PathPrefix("/").Handler(spaFileServer(staticDir))
 
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	})
+	// Global middleware stack (applied in order, outermost first)
+	corsOrigin := strings.TrimSpace(os.Getenv("CORS_ORIGIN"))
+	if corsOrigin == "" {
+		corsOrigin = "*"
+	}
+	r.Use(corsMiddleware(corsOrigin))
+	r.Use(middleware.SecurityHeaders)
+	r.Use(middleware.MaxBytesReader)
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	log.Printf("Server starting on port %s", port)
+	log.Printf("Server starting on port %s (CORS origin: %s)", port, corsOrigin)
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal("Server error:", err)
+	}
+}
+
+// corsMiddleware returns a CORS middleware with configurable origin
+func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 

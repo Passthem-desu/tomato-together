@@ -1,7 +1,10 @@
 package repository
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"log"
 	"time"
 
 	"tomatogether/backend/internal/models"
@@ -52,6 +55,11 @@ func (r *Repository) GetRoomByID(id string) (*models.Room, error) {
 }
 
 func (r *Repository) UpdateRoomSettings(roomID string, passwordHash string, isReadonly *bool) error {
+	if passwordHash != "" && isReadonly != nil {
+		_, err := r.db.Exec(`UPDATE rooms SET password_hash = ?, is_readonly = ? WHERE id = ?`,
+			passwordHash, boolToInt(*isReadonly), roomID)
+		return err
+	}
 	if passwordHash != "" {
 		_, err := r.db.Exec(`UPDATE rooms SET password_hash = ? WHERE id = ?`, passwordHash, roomID)
 		return err
@@ -112,6 +120,11 @@ func (r *Repository) UpdateMemberPassword(memberID, passwordHash string) error {
 	return err
 }
 
+func (r *Repository) UpdateMemberPasswordInTx(tx *sql.Tx, memberID, passwordHash string) error {
+	_, err := tx.Exec(`UPDATE room_members SET password_hash = ? WHERE id = ?`, passwordHash, memberID)
+	return err
+}
+
 func (r *Repository) SetMemberOwner(memberID string, isOwner bool) error {
 	query := `UPDATE room_members SET is_owner = ? WHERE id = ?`
 	_, err := r.db.Exec(query, boolToInt(isOwner), memberID)
@@ -146,15 +159,37 @@ func (r *Repository) scanMember(row *sql.Row) (*models.RoomMember, error) {
 // RoomToken operations
 
 func (r *Repository) CreateToken(token *models.RoomToken) error {
-	query := `INSERT INTO room_tokens (id, member_id, room_id, token, created_at, expires_at, last_heartbeat) VALUES (?, ?, ?, ?, ?, ?, ?)`
-	_, err := r.db.Exec(query, token.ID, token.MemberID, token.RoomID, token.Token, token.CreatedAt, token.ExpiresAt, token.LastHeartbeat)
+	tokenHash := hashToken(token.Token)
+	token.TokenHash = tokenHash
+	query := `INSERT INTO room_tokens (id, member_id, room_id, token, token_hash, created_at, expires_at, last_heartbeat) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := r.db.Exec(query, token.ID, token.MemberID, token.RoomID, token.Token, token.TokenHash, token.CreatedAt, token.ExpiresAt, token.LastHeartbeat)
 	return err
 }
 
 func (r *Repository) GetTokenByValue(tokenValue string) (*models.RoomToken, error) {
-	query := `SELECT id, member_id, room_id, token, created_at, expires_at, last_heartbeat FROM room_tokens WHERE token = ?`
-	row := r.db.QueryRow(query, tokenValue)
-	return r.scanToken(row)
+	tokenHash := hashToken(tokenValue)
+	query := `SELECT id, member_id, room_id, token, token_hash, created_at, expires_at, last_heartbeat FROM room_tokens WHERE token_hash = ?`
+	row := r.db.QueryRow(query, tokenHash)
+	token, err := r.scanToken(row)
+	if err != nil {
+		// Fallback: try lookup by plain token for legacy (pre-migration) tokens
+		query = `SELECT id, member_id, room_id, token, token_hash, created_at, expires_at, last_heartbeat FROM room_tokens WHERE token = ?`
+		row = r.db.QueryRow(query, tokenValue)
+		token, err = r.scanToken(row)
+		if err != nil {
+			return nil, err
+		}
+		// Upgrade legacy token to hash-based
+		newHash := hashToken(tokenValue)
+		r.db.Exec(`UPDATE room_tokens SET token_hash = ? WHERE id = ?`, newHash, token.ID)
+		token.TokenHash = newHash
+	}
+	return token, nil
+}
+
+func hashToken(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
 }
 
 func (r *Repository) UpdateTokenHeartbeat(tokenID string) error {
@@ -182,18 +217,85 @@ func (r *Repository) DeleteTokenByMemberAndRoom(memberID, roomID string) error {
 }
 
 func (r *Repository) GetTokenByMemberAndRoom(memberID, roomID string) (*models.RoomToken, error) {
-	query := `SELECT id, member_id, room_id, token, created_at, expires_at, last_heartbeat FROM room_tokens WHERE member_id = ? AND room_id = ?`
+	query := `SELECT id, member_id, room_id, token, token_hash, created_at, expires_at, last_heartbeat FROM room_tokens WHERE member_id = ? AND room_id = ?`
 	row := r.db.QueryRow(query, memberID, roomID)
 	return r.scanToken(row)
 }
 
 func (r *Repository) scanToken(row *sql.Row) (*models.RoomToken, error) {
 	token := &models.RoomToken{}
-	err := row.Scan(&token.ID, &token.MemberID, &token.RoomID, &token.Token, &token.CreatedAt, &token.ExpiresAt, &token.LastHeartbeat)
+	err := row.Scan(&token.ID, &token.MemberID, &token.RoomID, &token.Token, &token.TokenHash, &token.CreatedAt, &token.ExpiresAt, &token.LastHeartbeat)
 	if err != nil {
 		return nil, err
 	}
 	return token, nil
+}
+
+// RevokeToken revokes a token and adds it to the blacklist
+func (r *Repository) RevokeToken(tokenValue string) error {
+	tokenHash := hashToken(tokenValue)
+	// Add to revocation list
+	_, err := r.db.Exec(`INSERT OR IGNORE INTO token_revocations (id, token_hash, revoked_at) VALUES (?, ?, ?)`,
+		tokenHash+"_revoked", tokenHash, time.Now())
+	return err
+}
+
+// IsTokenRevoked checks if a token hash is in the blacklist
+func (r *Repository) IsTokenRevoked(tokenValue string) (bool, error) {
+	tokenHash := hashToken(tokenValue)
+	var count int
+	err := r.db.QueryRow(`SELECT COUNT(*) FROM token_revocations WHERE token_hash = ?`, tokenHash).Scan(&count)
+	return count > 0, err
+}
+
+// DeleteTokensByMemberID deletes all tokens for a member (kicks them from all sessions)
+func (r *Repository) DeleteTokensByMemberID(memberID string) error {
+	_, err := r.db.Exec(`DELETE FROM room_tokens WHERE member_id = ?`, memberID)
+	return err
+}
+
+// RunInTx executes a function within a database transaction
+func (r *Repository) RunInTx(fn func(tx *sql.Tx) error) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			tx.Rollback()
+		} else {
+			err = tx.Commit()
+		}
+	}()
+
+	err = fn(tx)
+	return err
+}
+
+// CreateTokenInTx creates a token within an existing transaction
+func (r *Repository) CreateTokenInTx(tx *sql.Tx, token *models.RoomToken) error {
+	tokenHash := hashToken(token.Token)
+	token.TokenHash = tokenHash
+	query := `INSERT INTO room_tokens (id, member_id, room_id, token, token_hash, created_at, expires_at, last_heartbeat) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := tx.Exec(query, token.ID, token.MemberID, token.RoomID, token.Token, token.TokenHash, token.CreatedAt, token.ExpiresAt, token.LastHeartbeat)
+	return err
+}
+
+// DeleteTokenByMemberAndRoomInTx deletes a token within an existing transaction
+func (r *Repository) DeleteTokenByMemberAndRoomInTx(tx *sql.Tx, memberID, roomID string) error {
+	_, err := tx.Exec(`DELETE FROM room_tokens WHERE member_id = ? AND room_id = ?`, memberID, roomID)
+	return err
+}
+
+// CleanupExpiredRevocations removes revocation records older than 24 hours
+func (r *Repository) CleanupExpiredRevocations() {
+	_, err := r.db.Exec(`DELETE FROM token_revocations WHERE revoked_at < datetime('now', '-24 hours')`)
+	if err != nil {
+		log.Printf("Warning: failed to cleanup expired revocations: %v", err)
+	}
 }
 
 // Tag operations
@@ -365,6 +467,9 @@ func (r *Repository) EndActiveSessionByMemberID(memberID string) error {
 		return err // No active session, nothing to end
 	}
 	duration := int(now.Sub(session.StartedAt).Seconds())
+	if duration < 60 {
+		duration = 0 // Don't count sessions stopped within 1 minute
+	}
 	return r.UpdatePomodoroSession(session.ID, &now, duration)
 }
 
@@ -568,7 +673,7 @@ func (r *Repository) DeleteAnnouncement(id string) error {
 // Stats operations
 
 func (r *Repository) GetMemberStats(memberID string) (int, int, error) {
-	query := `SELECT COUNT(*), COALESCE(SUM(duration), 0) FROM pomodoro_sessions WHERE member_id = ? AND ended_at IS NOT NULL`
+	query := `SELECT COUNT(*), COALESCE(SUM(duration), 0) FROM pomodoro_sessions WHERE member_id = ? AND ended_at IS NOT NULL AND duration > 0`
 	var totalPomodoros, totalDuration int
 	err := r.db.QueryRow(query, memberID).Scan(&totalPomodoros, &totalDuration)
 	return totalPomodoros, totalDuration, err
@@ -580,7 +685,7 @@ func (r *Repository) DeleteMemberPomodoroSessions(memberID string) error {
 }
 
 func (r *Repository) GetRoomMembersStats(roomID string) (map[string][2]int, error) {
-	query := `SELECT member_id, COUNT(*), COALESCE(SUM(duration), 0) FROM pomodoro_sessions WHERE room_id = ? AND ended_at IS NOT NULL GROUP BY member_id`
+	query := `SELECT member_id, COUNT(*), COALESCE(SUM(duration), 0) FROM pomodoro_sessions WHERE room_id = ? AND ended_at IS NOT NULL AND duration > 0 GROUP BY member_id`
 	rows, err := r.db.Query(query, roomID)
 	if err != nil {
 		return nil, err
@@ -615,7 +720,7 @@ func (r *Repository) GetTodayStats(roomID string, date time.Time) (int, int, int
 	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	endOfDay := startOfDay.Add(24 * time.Hour)
 
-	query := `SELECT COUNT(*), COALESCE(SUM(duration), 0), COUNT(DISTINCT member_id) FROM pomodoro_sessions WHERE room_id = ? AND started_at >= ? AND started_at < ? AND ended_at IS NOT NULL`
+	query := `SELECT COUNT(*), COALESCE(SUM(duration), 0), COUNT(DISTINCT member_id) FROM pomodoro_sessions WHERE room_id = ? AND started_at >= ? AND started_at < ? AND ended_at IS NOT NULL AND duration > 0`
 	var totalPomodoros, totalDuration, activeUsers int
 	err := r.db.QueryRow(query, roomID, startOfDay, endOfDay).Scan(&totalPomodoros, &totalDuration, &activeUsers)
 	return totalPomodoros, totalDuration, activeUsers, err

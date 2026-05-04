@@ -115,6 +115,12 @@ type UpgradeRequest struct {
 	Password string `json:"password"`
 }
 
+// ChangePasswordRequest is the request for changing own password
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
 // StartPomodoroRequest is the request for starting a pomodoro
 type StartPomodoroRequest struct {
 	RoomName                string `json:"room_name"`

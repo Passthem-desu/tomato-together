@@ -29,6 +29,7 @@ type RoomToken struct {
 	MemberID      string    `json:"member_id"`
 	RoomID        string    `json:"room_id"`
 	Token         string    `json:"token"`
+	TokenHash     string    `json:"-"`
 	CreatedAt     time.Time `json:"created_at"`
 	ExpiresAt     time.Time `json:"expires_at"`
 	LastHeartbeat time.Time `json:"last_heartbeat"`

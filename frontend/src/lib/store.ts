@@ -2,7 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 import type { Member, Room, UserInfo, PomodoroStatus } from './api';
 import { api, saveAuth, clearAuth } from './api';
 import { SSEClient, type TickData } from './sse/client';
-import { getErrorMessage, locale } from './i18n';
+import { getErrorMessage, locale, t } from './i18n';
 
 // App state
 export const currentMember = writable<Member | null>(null);
@@ -88,8 +88,17 @@ export function connectSSE() {
 
 	// Handle token expiry
 	const unsubTokenExpired = sseClient.on('token_expired', () => {
-		error.set('Token 已过期，请重新加入房间');
+		error.set(t('token_expired', get(locale)));
 		logout();
+	});
+
+	// Handle kicked from room
+	const unsubKicked = sseClient.on('kicked', (data: any) => {
+		const currentId = get(currentMember)?.id;
+		if (data.user_id === currentId) {
+			error.set(t('kicked_from_room', get(locale)));
+			logout();
+		}
 	});
 
 	// Handle announcements
@@ -108,6 +117,7 @@ export function connectSSE() {
 		unsubStatus,
 		unsubPhase,
 		unsubTokenExpired,
+		unsubKicked,
 		unsubAnnouncement,
 	];
 }
