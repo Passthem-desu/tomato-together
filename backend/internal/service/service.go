@@ -398,6 +398,10 @@ func (s *Service) GetRoomUsers(tokenValue string) ([]*models.UserInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Get per-member stats
+	statsMap, _ := s.repo.GetRoomMembersStats(token.RoomID)
+
 	onlineUsers := sse.GetHub().GetOnlineUsers(room.Name)
 	onlineMap := make(map[string]bool)
 	for _, u := range onlineUsers {
@@ -411,7 +415,13 @@ func (s *Service) GetRoomUsers(tokenValue string) ([]*models.UserInfo, error) {
 			Username:     member.Username,
 			IsOwner:      member.IsOwner,
 			IsPersistent: member.IsPersistent,
-			IsOnline:     onlineMap[member.ID], // Based on heartbeat / SSE connection
+			IsOnline:     onlineMap[member.ID],
+		}
+
+		// Attach stats
+		if s, ok := statsMap[member.ID]; ok {
+			user.TotalPomodoros = s[0]
+			user.TotalDuration = s[1]
 		}
 
 		// Get status
@@ -1238,6 +1248,14 @@ func (s *Service) DeleteAnnouncement(announcementID, memberID string) error {
 }
 
 // Helper functions
+
+func (s *Service) GetMemberStats(memberID string) (int, int, error) {
+	return s.repo.GetMemberStats(memberID)
+}
+
+func (s *Service) ResetMemberStats(memberID string) error {
+	return s.repo.DeleteMemberPomodoroSessions(memberID)
+}
 
 func generateToken() (string, error) {
 	bytes := make([]byte, 16)

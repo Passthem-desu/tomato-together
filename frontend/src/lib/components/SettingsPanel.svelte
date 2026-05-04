@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { locale, t } from '$lib/i18n';
+	import { api } from '$lib/api';
 	import { SoundManager, type SoundEvent, type SoundDef } from '$lib/sounds';
 
 	interface Props {
@@ -20,6 +21,7 @@
 		onsessionsBeforeLongChange: (v: number) => void;
 		onnotifyEnabledChange: (v: boolean) => void;
 		onsoundschanged?: () => void;
+		onreset?: () => void;
 	}
 
 	let {
@@ -40,6 +42,7 @@
 		onsessionsBeforeLongChange,
 		onnotifyEnabledChange,
 		onsoundschanged,
+		onreset = () => {},
 	}: Props = $props();
 
 	const allSoundEvents: SoundEvent[] = [
@@ -67,6 +70,19 @@
 	let newSoundUrl = $state('');
 	let fileInput = $state<HTMLInputElement | null>(null);
 	let showSoundDialog = $state(false);
+	let resetting = $state(false);
+
+	async function handleReset() {
+		if (!confirm(t('reset_confirm', $locale))) return;
+		resetting = true;
+		try {
+			await api.resetMyStats();
+			onreset();
+		} catch {
+			/* ignore */
+		}
+		resetting = false;
+	}
 
 	function addCustomSound() {
 		const label = newSoundLabel.trim();
@@ -241,6 +257,10 @@
 			</ul>
 		</div>
 	{/if}
+
+	<div class="reset-section">
+		<button class="btn-reset" onclick={handleReset}>{t('reset_stats', $locale)}</button>
+	</div>
 </div>
 
 {#if showSoundDialog}
@@ -425,6 +445,25 @@
 		gap: 0.5rem;
 		justify-content: flex-end;
 		margin-top: 1rem;
+	}
+
+	.reset-section {
+		margin-top: 1.25rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--color-border);
+	}
+	.btn-reset {
+		padding: 0.4rem 0.9rem;
+		font-size: 0.78rem;
+		border: 1px solid var(--color-error);
+		border-radius: var(--radius-md);
+		background: transparent;
+		color: var(--color-error);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+	.btn-reset:hover {
+		background: var(--color-error-subtle);
 	}
 	@media (max-width: 640px) {
 		.sounds-grid {

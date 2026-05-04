@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { locale, t } from '$lib/i18n';
-	import { api, type Task, type Tag } from '$lib/api';
+	import { api, type Tag } from '$lib/api';
+	import { taskStore, type LocalTask } from '$lib/taskStore';
 	import TagSelector from './TagSelector.svelte';
 
-	let tasks = $state<Task[]>([]);
+	let tasks = $state<LocalTask[]>([]);
 	let tags = $state<Tag[]>([]);
 	let loading = $state(true);
 	let initial = $state(true);
@@ -12,95 +13,100 @@
 	let newTitle = $state('');
 	let filterTagId = $state('');
 	let filterStatus = $state('');
+	let syncing = $state(false);
+	let syncMsg = $state('');
+	let dirty = $state(false);
+	let isPersistent = $state(false);
+	let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
 
-	let draggedIdx = $state<number | null>(null);
+	function markDirty() {
+		dirty = true;
+		if (isPersistent) scheduleAutoSync();
+	}
+
+	function scheduleAutoSync() {
+		if (autoSyncTimer) clearTimeout(autoSyncTimer);
+		autoSyncTimer = setTimeout(() => handleSync(), 3000);
+	}
 
 	function getRoomName() {
 		return localStorage.getItem('room_name') || '';
 	}
 
 	async function loadData() {
-		// Only show full loading spinner on first load; refreshes keep current data visible
 		if (initial) loading = true;
 		error = '';
+
+		// Load tags from server
 		try {
-			const [tagsResp, tasksResp] = await Promise.all([
-				api.getTags(),
-				api.getTasks(filterStatus || undefined),
-			]);
+			const tagsResp = await api.getTags();
 			tags = tagsResp.data?.tags || [];
-			tasks = tasksResp.data?.tasks || [];
-		} catch (e: any) {
-			error = e.message;
-		} finally {
-			loading = false;
-			initial = false;
+		} catch {
+			/* offline */
+		}
+
+		// Load tasks from LocalStorage
+		tasks = taskStore.getAll();
+
+		loading = false;
+		initial = false;
+
+		// Check if persistent user
+		const memberStr = localStorage.getItem('member');
+		if (memberStr) {
+			try {
+				isPersistent = JSON.parse(memberStr).is_persistent;
+			} catch {
+				/* */
+			}
 		}
 	}
 
 	let displayTasks = $derived(
 		tasks.filter((t) => {
 			if (filterTagId && t.tag_id !== filterTagId) return false;
+			if (filterStatus && t.status !== filterStatus) return false;
 			return true;
 		})
 	);
 
-	async function handleAdd() {
+	function handleAdd() {
 		const title = newTitle.trim();
 		if (!title) return;
-		try {
-			const clientId = crypto.randomUUID();
-			await api.createTask({
-				room_name: getRoomName(),
-				client_id: clientId,
-				title,
-				tag_id: filterTagId || undefined,
-			});
-			newTitle = '';
-			await loadData();
-		} catch (e: any) {
-			error = e.message;
-		}
+		taskStore.add(title, filterTagId || undefined);
+		tasks = taskStore.getAll();
+		newTitle = '';
+		markDirty();
 	}
 
-	async function handleStatusCycle(task: Task) {
+	function handleStatusCycle(task: LocalTask) {
 		const next: Record<string, string> = { TODO: 'WIP', WIP: 'DONE', DONE: 'TODO' };
-		const newStatus = next[task.status] || 'TODO';
-		try {
-			await api.updateTask(task.id, { status: newStatus });
-			await loadData();
-		} catch (e: any) {
-			error = e.message;
-		}
+		taskStore.update(task.client_id, { status: next[task.status] as LocalTask['status'] });
+		tasks = taskStore.getAll();
+		markDirty();
 	}
 
-	async function handleTitleChange(taskId: string, title: string) {
-		try {
-			await api.updateTask(taskId, { title });
-		} catch (e: any) {
-			error = e.message;
-		}
+	function handleTitleChange(task: LocalTask, title: string) {
+		taskStore.update(task.client_id, { title });
+		tasks = taskStore.getAll();
+		markDirty();
 	}
 
-	async function handleTagChange(taskId: string, tagId: string) {
-		try {
-			await api.updateTask(taskId, { tag_id: tagId || '' });
-			await loadData();
-		} catch (e: any) {
-			error = e.message;
-		}
+	function handleTagChange(task: LocalTask, tagId: string) {
+		taskStore.update(task.client_id, { tag_id: tagId || undefined });
+		tasks = taskStore.getAll();
+		markDirty();
 	}
 
-	async function handleDelete(taskId: string) {
-		try {
-			await api.deleteTask(taskId);
-			await loadData();
-		} catch (e: any) {
-			error = e.message;
-		}
+	function handleDelete(task: LocalTask) {
+		taskStore.remove(task.client_id);
+		tasks = taskStore.getAll();
+		markDirty();
 	}
 
-	// ── drag-and-drop reordering ──
+	// ── drag and drop ──
+	let draggedIdx = $state<number | null>(null);
+
 	function handleDragStart(e: DragEvent, idx: number) {
 		draggedIdx = idx;
 		e.dataTransfer!.effectAllowed = 'move';
@@ -110,7 +116,9 @@
 	function handleDragEnd(e: DragEvent) {
 		(e.currentTarget as HTMLElement).closest('.wip-item')?.classList.remove('dragging');
 		draggedIdx = null;
-		document.querySelectorAll('.wip-item').forEach((el) => el.classList.remove('drop-above', 'drop-below'));
+		document
+			.querySelectorAll('.wip-item')
+			.forEach((el) => el.classList.remove('drop-above', 'drop-below'));
 	}
 
 	function handleDragOver(e: DragEvent) {
@@ -127,35 +135,38 @@
 		(e.currentTarget as HTMLElement).classList.remove('drop-above', 'drop-below');
 	}
 
-	async function handleDrop(e: DragEvent, targetIdx: number) {
+	function handleDrop(e: DragEvent, targetIdx: number) {
 		e.preventDefault();
 		const el = e.currentTarget as HTMLElement;
-		const rect = el.getBoundingClientRect();
-		const mid = rect.top + rect.height / 2;
-		let insertIdx = e.clientY < mid ? targetIdx : targetIdx + 1;
 		el.classList.remove('drop-above', 'drop-below');
 		if (draggedIdx === null) return;
+		let insertIdx =
+			el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2 < e.clientY
+				? targetIdx + 1
+				: targetIdx;
 		if (draggedIdx < insertIdx) insertIdx--;
 		if (insertIdx === draggedIdx) return;
-
-		const src = displayTasks[draggedIdx];
-		const reordered = [...displayTasks];
-		reordered.splice(draggedIdx, 1);
-		reordered.splice(insertIdx, 0, src);
-
-		const updates: Promise<any>[] = [];
-		for (let i = 0; i < reordered.length; i++) {
-			if (reordered[i].id !== displayTasks[i].id) {
-				updates.push(api.updateTask(reordered[i].id, { title: displayTasks[i].title }));
-			}
-		}
-		try {
-			await Promise.all(updates);
-			await loadData();
-		} catch (e: any) {
-			error = e.message;
-		}
+		taskStore.reorder(draggedIdx, insertIdx);
+		tasks = taskStore.getAll();
+		markDirty();
 		draggedIdx = null;
+	}
+
+	// ── sync ──
+	async function handleSync() {
+		if (autoSyncTimer) clearTimeout(autoSyncTimer);
+		syncing = true;
+		syncMsg = '';
+		try {
+			tasks = await taskStore.syncWithServer(getRoomName());
+			dirty = false;
+			syncMsg = t('sync_done', $locale);
+			setTimeout(() => (syncMsg = ''), 2000);
+		} catch (e: any) {
+			syncMsg = e.message || t('sync_failed', $locale);
+		} finally {
+			syncing = false;
+		}
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -180,29 +191,59 @@
 
 	onMount(() => {
 		loadData();
+		if (isPersistent) scheduleAutoSync();
 	});
 </script>
 
-<div class="wip-panel">
+<div class="card wip-panel">
 	<div class="wip-header">
 		<h3>{t('wip', $locale)}</h3>
-		<div class="status-filter">
-			<button class="filter-btn {!filterStatus ? 'active' : ''}" onclick={() => { filterStatus = ''; loadData(); }}>
-				{t('all', $locale)}
-			</button>
-			<button class="filter-btn {filterStatus === 'TODO' ? 'active' : ''}" onclick={() => { filterStatus = 'TODO'; loadData(); }}>
-				{t('todo', $locale)}
-			</button>
-			<button class="filter-btn {filterStatus === 'WIP' ? 'active' : ''}" onclick={() => { filterStatus = 'WIP'; loadData(); }}>
-				{t('wip_status', $locale)}
-			</button>
-			<button class="filter-btn {filterStatus === 'DONE' ? 'active' : ''}" onclick={() => { filterStatus = 'DONE'; loadData(); }}>
-				{t('done', $locale)}
-			</button>
+		<div class="wip-header-right">
+			<div class="status-filter">
+				<button
+					class="filter-btn {!filterStatus ? 'active' : ''}"
+					onclick={() => (filterStatus = '')}
+				>
+					{t('all', $locale)}
+				</button>
+				<button
+					class="filter-btn {filterStatus === 'TODO' ? 'active' : ''}"
+					onclick={() => (filterStatus = 'TODO')}
+				>
+					{t('todo', $locale)}
+				</button>
+				<button
+					class="filter-btn {filterStatus === 'WIP' ? 'active' : ''}"
+					onclick={() => (filterStatus = 'WIP')}
+				>
+					{t('wip_status', $locale)}
+				</button>
+				<button
+					class="filter-btn {filterStatus === 'DONE' ? 'active' : ''}"
+					onclick={() => (filterStatus = 'DONE')}
+				>
+					{t('done', $locale)}
+				</button>
+			</div>
+			{#if isPersistent}
+				<button
+					class="sync-btn {dirty ? 'dirty' : ''} {syncing ? 'spinning' : ''}"
+					onclick={handleSync}
+					disabled={syncing}
+				>
+					<span class="sync-icon">{syncing ? '⟳' : dirty ? '☁' : '☁'}</span>
+					{syncMsg || t('sync', $locale)}
+				</button>
+			{/if}
 		</div>
 	</div>
 
-	<TagSelector {tags} selectedTagId={filterTagId} onselect={(id) => (filterTagId = id)} ontagschange={loadData} />
+	<TagSelector
+		{tags}
+		selectedTagId={filterTagId}
+		onselect={(id) => (filterTagId = id)}
+		ontagschange={loadData}
+	/>
 
 	<div class="wip-add">
 		<input
@@ -212,7 +253,9 @@
 			onkeydown={handleKeydown}
 			maxlength={200}
 		/>
-		<button class="btn-circle btn-add-wip" onclick={handleAdd} disabled={!newTitle.trim()}>+</button>
+		<button class="btn-circle btn-add-wip" onclick={handleAdd} disabled={!newTitle.trim()}
+			>+</button
+		>
 	</div>
 
 	{#if error}
@@ -225,7 +268,7 @@
 		<p class="wip-empty">{t('no_wip', $locale)}</p>
 	{:else}
 		<ul class="wip-list">
-			{#each displayTasks as task, idx (task.id)}
+			{#each displayTasks as task, idx (task.client_id)}
 				<li
 					class="wip-item {task.status === 'DONE' ? 'done' : ''}"
 					draggable="true"
@@ -248,14 +291,16 @@
 						class="task-input"
 						type="text"
 						value={task.title}
-						onchange={(e) => handleTitleChange(task.id, (e.target as HTMLInputElement).value)}
+						onchange={(e) =>
+							handleTitleChange(task, (e.target as HTMLInputElement).value)}
 						maxlength={200}
 					/>
 
 					<select
 						class="task-tag"
 						value={task.tag_id || ''}
-						onchange={(e) => handleTagChange(task.id, (e.target as HTMLSelectElement).value)}
+						onchange={(e) =>
+							handleTagChange(task, (e.target as HTMLSelectElement).value)}
 					>
 						<option value="">{t('no_tag', $locale)}</option>
 						{#each tags as tag (tag.id)}
@@ -264,7 +309,11 @@
 					</select>
 
 					<div class="task-actions">
-						<button class="btn-del-text" onclick={() => handleDelete(task.id)} title={t('delete', $locale)}>×</button>
+						<button
+							class="btn-del-text"
+							onclick={() => handleDelete(task)}
+							title={t('delete', $locale)}>×</button
+						>
 					</div>
 				</li>
 			{/each}
@@ -274,10 +323,6 @@
 
 <style>
 	.wip-panel {
-		background: var(--color-bg-1);
-		border-radius: 0.75rem;
-		padding: 1rem;
-		border: 1px solid var(--color-border);
 	}
 	.wip-header {
 		display: flex;
@@ -292,8 +337,55 @@
 		font-size: 0.95rem;
 		font-weight: 700;
 	}
+	.wip-header-right {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
 
-	/* ── filter buttons ── */
+	.sync-btn {
+		padding: 0.2rem 0.6rem;
+		font-size: 0.7rem;
+		border-radius: 999px;
+		border: 1px solid var(--color-border);
+		background: var(--color-bg-0);
+		color: var(--color-fg-muted);
+		cursor: pointer;
+		font-weight: 500;
+		white-space: nowrap;
+		transition: all 0.2s;
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+	}
+	.sync-btn:hover:not(:disabled) {
+		border-color: var(--color-brand);
+		color: var(--color-brand);
+	}
+	.sync-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	.sync-btn.dirty {
+		border-color: var(--color-brand);
+		color: var(--color-brand);
+	}
+	.sync-btn.dirty:hover:not(:disabled) {
+		background: var(--color-brand-subtle);
+	}
+	.sync-icon {
+		display: inline-block;
+		font-size: 0.85rem;
+	}
+	.sync-btn.spinning .sync-icon {
+		animation: spin 0.8s linear infinite;
+	}
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
 	.status-filter {
 		display: flex;
 		gap: 0.25rem;
@@ -306,8 +398,8 @@
 		background: var(--color-bg-0);
 		color: var(--color-fg-muted);
 		cursor: pointer;
-		transition: all 0.15s;
 		font-weight: 500;
+		transition: all 0.15s;
 	}
 	.filter-btn:hover {
 		border-color: var(--color-brand);
@@ -319,7 +411,6 @@
 		color: #fff;
 	}
 
-	/* ── add bar ── */
 	.wip-add {
 		display: flex;
 		gap: 0.4rem;
@@ -339,7 +430,6 @@
 		border-color: var(--color-brand);
 	}
 
-	/* ── circle buttons ── */
 	.btn-circle {
 		width: 28px;
 		height: 28px;
@@ -376,7 +466,6 @@
 		background: var(--color-bg-0);
 	}
 
-	/* ── messages ── */
 	.wip-error {
 		color: var(--color-error);
 		font-size: 0.75rem;
@@ -389,38 +478,6 @@
 		padding: 1.5rem 0;
 	}
 
-	/* ── drag handle ── */
-	.drag-handle {
-		cursor: grab;
-		color: var(--color-fg-muted);
-		font-size: 0.7rem;
-		letter-spacing: -0.15em;
-		padding: 0 0.1rem;
-		flex-shrink: 0;
-		user-select: none;
-		line-height: 1;
-	}
-	.drag-handle:active {
-		cursor: grabbing;
-	}
-	.wip-item.dragging {
-		opacity: 0.35;
-	}
-	.wip-item.drop-above::before,
-	.wip-item.drop-below::after {
-		content: '';
-		position: absolute;
-		left: 0.25rem;
-		right: 0.25rem;
-		height: 2px;
-		background: var(--color-brand);
-		border-radius: 1px;
-		pointer-events: none;
-	}
-	.wip-item.drop-above::before { top: -1px; }
-	.wip-item.drop-below::after { bottom: -1px; }
-
-	/* ── list ── */
 	.wip-list {
 		list-style: none;
 		padding: 0;
@@ -447,7 +504,41 @@
 		text-decoration: line-through;
 	}
 
-	/* ── status cycle button ── */
+	.drag-handle {
+		cursor: grab;
+		color: var(--color-fg-muted);
+		font-size: 0.85rem;
+		letter-spacing: -0.15em;
+		padding: 0.3rem 0.2rem;
+		margin: -0.3rem 0;
+		flex-shrink: 0;
+		user-select: none;
+		line-height: 1;
+	}
+	.drag-handle:active {
+		cursor: grabbing;
+	}
+	.wip-item.dragging {
+		opacity: 0.35;
+	}
+	.wip-item.drop-above::before,
+	.wip-item.drop-below::after {
+		content: '';
+		position: absolute;
+		left: 0.25rem;
+		right: 0.25rem;
+		height: 2px;
+		background: var(--color-brand);
+		border-radius: 1px;
+		pointer-events: none;
+	}
+	.wip-item.drop-above::before {
+		top: -1px;
+	}
+	.wip-item.drop-below::after {
+		bottom: -1px;
+	}
+
 	.status-btn {
 		display: inline-flex;
 		align-items: center;
@@ -483,7 +574,6 @@
 		font-weight: 500;
 	}
 
-	/* ── inline title input ── */
 	.task-input {
 		flex: 1;
 		min-width: 0;
@@ -504,7 +594,6 @@
 		background: var(--color-bg-1);
 	}
 
-	/* ── tag selector ── */
 	.task-tag {
 		font-size: 0.65rem;
 		padding: 0.2rem 0.5rem;
@@ -518,6 +607,11 @@
 		flex-shrink: 0;
 	}
 
+	.task-actions {
+		display: flex;
+		gap: 0.15rem;
+		flex-shrink: 0;
+	}
 	.btn-del-text {
 		width: 24px;
 		height: 24px;
@@ -537,12 +631,5 @@
 	.btn-del-text:hover {
 		color: var(--color-error);
 		background: var(--color-error-subtle);
-	}
-
-	/* ── action buttons ── */
-	.task-actions {
-		display: flex;
-		gap: 0.15rem;
-		flex-shrink: 0;
 	}
 </style>

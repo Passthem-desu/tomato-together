@@ -39,13 +39,15 @@ type MemberInfo struct {
 
 // UserInfo contains detailed user information for responses
 type UserInfo struct {
-	ID           string        `json:"id"`
-	Username     string        `json:"username"`
-	IsOwner      bool          `json:"is_owner"`
-	IsPersistent bool          `json:"is_persistent"`
-	Status       *StatusInfo   `json:"status,omitempty"`
-	Pomodoro     *PomodoroInfo `json:"pomodoro,omitempty"`
-	IsOnline     bool          `json:"is_online"`
+	ID             string        `json:"id"`
+	Username       string        `json:"username"`
+	IsOwner        bool          `json:"is_owner"`
+	IsPersistent   bool          `json:"is_persistent"`
+	Status         *StatusInfo   `json:"status,omitempty"`
+	Pomodoro       *PomodoroInfo `json:"pomodoro,omitempty"`
+	IsOnline       bool          `json:"is_online"`
+	TotalPomodoros int           `json:"total_pomodoros"`
+	TotalDuration  int           `json:"total_duration"`
 }
 
 // StatusInfo contains user status information
@@ -174,10 +176,10 @@ type UpdateTagRequest struct {
 
 // CreateTaskRequest is the request for creating a task
 type CreateTaskRequest struct {
-	RoomName  string `json:"room_name"`
-	ClientID  string `json:"client_id"`
-	Title     string `json:"title"`
-	TagID     string `json:"tag_id,omitempty"`
+	RoomName string `json:"room_name"`
+	ClientID string `json:"client_id"`
+	Title    string `json:"title"`
+	TagID    string `json:"tag_id,omitempty"`
 }
 
 // UpdateTaskRequest is the request for updating a task
@@ -222,19 +224,19 @@ type SyncTaskResult struct {
 
 // StatsResponse is the response for stats
 type StatsResponse struct {
-	Period         string     `json:"period"`
-	TotalPomodoros int        `json:"total_pomodoros"`
-	TotalDuration  int        `json:"total_duration"`
-	ByTag          []TagStat  `json:"by_tag,omitempty"`
-	ByDay          []DayStat  `json:"by_day,omitempty"`
+	Period         string    `json:"period"`
+	TotalPomodoros int       `json:"total_pomodoros"`
+	TotalDuration  int       `json:"total_duration"`
+	ByTag          []TagStat `json:"by_tag,omitempty"`
+	ByDay          []DayStat `json:"by_day,omitempty"`
 }
 
 // TagStat represents stats by tag
 type TagStat struct {
-	TagID          string `json:"tag_id"`
-	TagName        string `json:"tag_name"`
-	PomodoroCount  int    `json:"pomodoro_count"`
-	TotalDuration  int    `json:"total_duration"`
+	TagID         string `json:"tag_id"`
+	TagName       string `json:"tag_name"`
+	PomodoroCount int    `json:"pomodoro_count"`
+	TotalDuration int    `json:"total_duration"`
 }
 
 // DayStat represents stats by day

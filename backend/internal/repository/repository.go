@@ -567,6 +567,37 @@ func (r *Repository) DeleteAnnouncement(id string) error {
 
 // Stats operations
 
+func (r *Repository) GetMemberStats(memberID string) (int, int, error) {
+	query := `SELECT COUNT(*), COALESCE(SUM(duration), 0) FROM pomodoro_sessions WHERE member_id = ? AND ended_at IS NOT NULL`
+	var totalPomodoros, totalDuration int
+	err := r.db.QueryRow(query, memberID).Scan(&totalPomodoros, &totalDuration)
+	return totalPomodoros, totalDuration, err
+}
+
+func (r *Repository) DeleteMemberPomodoroSessions(memberID string) error {
+	_, err := r.db.Exec(`DELETE FROM pomodoro_sessions WHERE member_id = ?`, memberID)
+	return err
+}
+
+func (r *Repository) GetRoomMembersStats(roomID string) (map[string][2]int, error) {
+	query := `SELECT member_id, COUNT(*), COALESCE(SUM(duration), 0) FROM pomodoro_sessions WHERE room_id = ? AND ended_at IS NOT NULL GROUP BY member_id`
+	rows, err := r.db.Query(query, roomID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string][2]int)
+	for rows.Next() {
+		var memberID string
+		var count, dur int
+		if err := rows.Scan(&memberID, &count, &dur); err != nil {
+			return nil, err
+		}
+		result[memberID] = [2]int{count, dur}
+	}
+	return result, nil
+}
+
 func (r *Repository) GetRoomMemberCount(roomID string) (int, error) {
 	query := `SELECT COUNT(*) FROM room_members WHERE room_id = ?`
 	var count int

@@ -55,10 +55,7 @@
 
 <div class="tag-selector">
 	<div class="tag-list">
-		<button
-			class="tag-chip {!selectedTagId ? 'active' : ''}"
-			onclick={() => onselect('')}
-		>
+		<button class="tag-chip {!selectedTagId ? 'active' : ''}" onclick={() => onselect('')}>
 			{t('all', $locale)}
 		</button>
 		{#each tags as tag (tag.id)}
@@ -69,7 +66,11 @@
 				>
 					{tag.name}
 				</button>
-				<button class="tag-delete" onclick={() => handleDelete(tag.id)} title={t('delete', $locale)}>
+				<button
+					class="tag-delete"
+					onclick={() => handleDelete(tag.id)}
+					title={t('delete', $locale)}
+				>
 					×
 				</button>
 			</div>
@@ -85,7 +86,14 @@
 					autofocus
 				/>
 				<button class="btn-add" onclick={handleAdd} disabled={!newTagName.trim()}>+</button>
-				<button class="btn-cancel" onclick={() => { showAdd = false; newTagName = ''; error = ''; }}>×</button>
+				<button
+					class="btn-cancel"
+					onclick={() => {
+						showAdd = false;
+						newTagName = '';
+						error = '';
+					}}>×</button
+				>
 			</div>
 		{:else}
 			<button class="tag-chip tag-add-btn" onclick={() => (showAdd = true)}>
@@ -176,7 +184,8 @@
 		color: var(--color-text);
 		outline: none;
 	}
-	.btn-add, .btn-cancel {
+	.btn-add,
+	.btn-cancel {
 		width: 22px;
 		height: 22px;
 		padding: 0;
@@ -190,11 +199,25 @@
 		justify-content: center;
 		color: var(--color-fg-0);
 	}
-	.btn-add:not(:disabled) { color: var(--color-brand); border-color: var(--color-brand); }
-	.btn-add:disabled { color: var(--color-fg-muted); border-color: var(--color-border); cursor: default; }
-	.btn-add:not(:disabled):hover { background: var(--color-brand-subtle); }
-	.btn-cancel { color: var(--color-text-muted); }
-	.btn-cancel:hover { background: var(--color-bg-2); color: var(--color-fg-0); }
+	.btn-add:not(:disabled) {
+		color: var(--color-brand);
+		border-color: var(--color-brand);
+	}
+	.btn-add:disabled {
+		color: var(--color-fg-muted);
+		border-color: var(--color-border);
+		cursor: default;
+	}
+	.btn-add:not(:disabled):hover {
+		background: var(--color-brand-subtle);
+	}
+	.btn-cancel {
+		color: var(--color-text-muted);
+	}
+	.btn-cancel:hover {
+		background: var(--color-bg-2);
+		color: var(--color-fg-0);
+	}
 	.tag-error {
 		font-size: 0.7rem;
 		color: var(--color-danger);

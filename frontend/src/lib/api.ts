@@ -44,6 +44,8 @@ export interface UserInfo {
 		remaining_seconds?: number;
 	};
 	is_online: boolean;
+	total_pomodoros?: number;
+	total_duration?: number;
 }
 
 export interface Tag {
@@ -293,7 +295,10 @@ export const api = {
 		return apiRequest('/tags');
 	},
 
-	createTag: async (data: { room_name: string; name: string }): Promise<{ success: boolean; data: Tag }> => {
+	createTag: async (data: {
+		room_name: string;
+		name: string;
+	}): Promise<{ success: boolean; data: Tag }> => {
 		return apiRequest('/tags', { method: 'POST', body: JSON.stringify(data) });
 	},
 
@@ -320,16 +325,38 @@ export const api = {
 		return apiRequest('/tasks', { method: 'POST', body: JSON.stringify(data) });
 	},
 
-	updateTask: async (id: string, data: {
-		title?: string;
-		status?: string;
-		tag_id?: string;
-	}): Promise<{ success: boolean }> => {
+	updateTask: async (
+		id: string,
+		data: {
+			title?: string;
+			status?: string;
+			tag_id?: string;
+		}
+	): Promise<{ success: boolean }> => {
 		return apiRequest(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 	},
 
 	deleteTask: async (id: string): Promise<{ success: boolean }> => {
 		return apiRequest(`/tasks/${id}`, { method: 'DELETE' });
+	},
+
+	syncTasks: async (
+		roomName: string,
+		tasks: Array<{
+			client_id: string;
+			title: string;
+			status: string;
+			tag_id?: string;
+			created_at: string;
+		}>
+	): Promise<{
+		success: boolean;
+		data: { synced: number; tasks: Array<{ client_id: string; server_id: string }> };
+	}> => {
+		return apiRequest('/tasks/sync', {
+			method: 'POST',
+			body: JSON.stringify({ room_name: roomName, tasks }),
+		});
 	},
 
 	// Announcements
@@ -353,6 +380,17 @@ export const api = {
 		return apiRequest(`/rooms/${encodeURIComponent(roomName)}/announcements/${id}`, {
 			method: 'DELETE',
 		});
+	},
+
+	getMyStats: async (): Promise<{
+		success: boolean;
+		data: { total_pomodoros: number; total_duration: number };
+	}> => {
+		return apiRequest('/stats/me');
+	},
+
+	resetMyStats: async (): Promise<{ success: boolean }> => {
+		return apiRequest('/stats/me', { method: 'DELETE' });
 	},
 
 	// Pause pomodoro

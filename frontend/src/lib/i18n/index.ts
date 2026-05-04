@@ -173,6 +173,13 @@ const translations: Record<Locale, Record<string, string>> = {
 		send: '发送',
 		delete: '删除',
 		drag_to_reorder: '拖拽排序',
+		sync: '同步',
+		sync_done: '已同步',
+		sync_failed: '同步失败',
+		pomodoros_short: '个番茄',
+		focus_short: '专注',
+		reset_stats: '重置统计数据',
+		reset_confirm: '确定要重置所有番茄和计时数据吗？此操作不可撤销。',
 	},
 
 	'zh-hant': {
@@ -314,6 +321,13 @@ const translations: Record<Locale, Record<string, string>> = {
 		send: '發送',
 		delete: '刪除',
 		drag_to_reorder: '拖曳排序',
+		sync: '同步',
+		sync_done: '已同步',
+		sync_failed: '同步失敗',
+		pomodoros_short: '個番茄',
+		focus_short: '專注',
+		reset_stats: '重置統計數據',
+		reset_confirm: '確定要重置所有番茄和計時數據嗎？此操作不可撤銷。',
 
 		custom_sounds: '自訂音效',
 		custom_sounds_hint: '可添加 URL 音訊或上傳本地檔案（存於瀏覽器）',
@@ -472,6 +486,13 @@ const translations: Record<Locale, Record<string, string>> = {
 		send: 'Send',
 		delete: 'Delete',
 		drag_to_reorder: 'Drag to reorder',
+		sync: 'Sync',
+		sync_done: 'Synced',
+		sync_failed: 'Sync failed',
+		pomodoros_short: 'pomodoros',
+		focus_short: 'focus',
+		reset_stats: 'Reset Stats',
+		reset_confirm: 'Reset all pomodoro and timer data? This cannot be undone.',
 	},
 
 	ja: {
@@ -621,6 +642,13 @@ const translations: Record<Locale, Record<string, string>> = {
 		send: '送信',
 		delete: '削除',
 		drag_to_reorder: 'ドラッグで並べ替え',
+		sync: '同期',
+		sync_done: '同期完了',
+		sync_failed: '同期失敗',
+		pomodoros_short: 'ポモドーロ',
+		focus_short: '集中',
+		reset_stats: '統計をリセット',
+		reset_confirm: '全てのポモドーロデータをリセットしますか？この操作は元に戻せません。',
 	},
 
 	ko: {
@@ -770,6 +798,13 @@ const translations: Record<Locale, Record<string, string>> = {
 		send: '보내기',
 		delete: '삭제',
 		drag_to_reorder: '드래그하여 정렬',
+		sync: '동기화',
+		sync_done: '동기화 완료',
+		sync_failed: '동기화 실패',
+		pomodoros_short: '포모도로',
+		focus_short: '집중',
+		reset_stats: '통계 초기화',
+		reset_confirm: '모든 포모도로 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
 	},
 
 	vi: {
@@ -919,6 +954,13 @@ const translations: Record<Locale, Record<string, string>> = {
 		send: 'Gửi',
 		delete: 'Xóa',
 		drag_to_reorder: 'Kéo để sắp xếp',
+		sync: 'Đồng bộ',
+		sync_done: 'Đã đồng bộ',
+		sync_failed: 'Đồng bộ thất bại',
+		pomodoros_short: 'pomodoro',
+		focus_short: 'tập trung',
+		reset_stats: 'Đặt lại thống kê',
+		reset_confirm: 'Đặt lại tất cả dữ liệu pomodoro? Không thể hoàn tác.',
 	},
 };
 

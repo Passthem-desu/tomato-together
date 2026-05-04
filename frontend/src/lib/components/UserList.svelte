@@ -14,6 +14,13 @@
 			.toString()
 			.padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 	}
+
+	function formatMinutes(sec: number) {
+		if (!sec) return '';
+		const m = Math.round(sec / 60);
+		if (m < 60) return m + 'm';
+		return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+	}
 </script>
 
 <div class="card users-card">
@@ -26,8 +33,8 @@
 				<div class="user-item">
 					<div class="user-info">
 						<div class="user-details">
-							<span class="user-name"
-								>{user.username}
+							<span class="user-name">
+								{user.username}
 								{#if user.id === currentMemberId}<span class="you-badge"
 										>{t('me', $locale)}</span
 									>{/if}
@@ -35,6 +42,15 @@
 										>{t('owner', $locale)}</span
 									>{/if}
 							</span>
+							{#if user.total_pomodoros !== undefined && user.total_pomodoros > 0}
+								<span class="user-stats"
+									>{user.total_pomodoros}
+									{t('pomodoros_short', $locale)} / {formatMinutes(
+										user.total_duration || 0
+									)}
+									{t('focus_short', $locale)}</span
+								>
+							{/if}
 							{#if user.status}
 								<span class="user-status"
 									>{user.status.emoji} {user.status.message}</span
@@ -136,6 +152,10 @@
 		font-size: var(--text-xs);
 		color: var(--color-fg-muted);
 	}
+	.user-stats {
+		font-size: 0.7rem;
+		color: var(--color-fg-muted);
+	}
 	.user-pomodoro .active-pomodoro {
 		font-weight: 600;
 		color: var(--color-brand);
@@ -146,7 +166,7 @@
 	}
 	.user-pomodoro .paused-status {
 		font-size: var(--text-sm);
-		color: var(--color-warning, #f59e0b);
+		color: var(--color-warning);
 	}
 	.user-pomodoro .rest-status {
 		font-size: var(--text-sm);

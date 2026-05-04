@@ -71,7 +71,8 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	authRouter.HandleFunc("/tasks", h.CreateTask).Methods(http.MethodPost)
 	authRouter.HandleFunc("/tasks/{id}", h.UpdateTask).Methods(http.MethodPut)
 	authRouter.HandleFunc("/tasks/{id}", h.DeleteTask).Methods(http.MethodDelete)
-	authRouter.HandleFunc("/tasks/sync", h.SyncTasks).Methods(http.MethodPost)
+	authRouter.HandleFunc("/stats/me", h.GetMyStats).Methods(http.MethodGet)
+	authRouter.HandleFunc("/stats/me", h.ResetMyStats).Methods(http.MethodDelete)
 
 	// Room creation (requires persistent user - password must be provided)
 	r.HandleFunc("/rooms", h.CreateRoom).Methods(http.MethodPost)
@@ -971,6 +972,44 @@ func (h *Handler) SyncTasks(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data":    resp,
+	})
+}
+
+func (h *Handler) GetMyStats(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+
+	totalPomodoros, totalDuration, err := h.svc.GetMemberStats(token.MemberID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"total_pomodoros": totalPomodoros,
+			"total_duration":  totalDuration,
+		},
+	})
+}
+
+func (h *Handler) ResetMyStats(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+	if err := h.svc.ResetMemberStats(token.MemberID); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    map[string]string{"message": "统计数据已重置"},
 	})
 }
 

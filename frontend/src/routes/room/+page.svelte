@@ -219,6 +219,7 @@
 		countdown.stop();
 		sessionIndex = 0;
 		displayTime = plannedMinutes * 60;
+		loadMyStats();
 	}
 
 	async function handleEnd() {
@@ -255,6 +256,24 @@
 		} catch {
 			/* ignore */
 		}
+	}
+
+	async function loadMyStats() {
+		try {
+			const resp = await api.getMyStats();
+			if (resp.data) {
+				myPomodoros = resp.data.total_pomodoros;
+				myDuration = resp.data.total_duration;
+			}
+		} catch {
+			/* offline */
+		}
+	}
+
+	function formatMinutes(sec: number) {
+		const m = Math.round(sec / 60);
+		if (m < 60) return m + 'm';
+		return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
 	}
 
 	// ── Notifications ──
@@ -330,6 +349,7 @@
 					onsessionsBeforeLongChange={(v) => (sessionsBeforeLong = v)}
 					onnotifyEnabledChange={handleNotifyChange}
 					onsoundschanged={handleSoundsChanged}
+					onreset={() => refreshRoomUsers()}
 				/>
 			{:else}
 				<TimerCard

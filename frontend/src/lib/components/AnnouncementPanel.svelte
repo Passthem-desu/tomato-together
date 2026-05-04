@@ -87,7 +87,7 @@
 	});
 </script>
 
-<div class="announcement-panel">
+<div class="card announcement-panel">
 	<div class="ann-header">
 		<h3>{t('announcements', $locale)}</h3>
 		{#if isOwner}
@@ -112,10 +112,21 @@
 				rows={3}
 			></textarea>
 			<div class="ann-form-actions">
-				<button class="btn-submit" onclick={handleSend} disabled={sending || !title.trim() || !body.trim()}>
+				<button
+					class="btn-submit"
+					onclick={handleSend}
+					disabled={sending || !title.trim() || !body.trim()}
+				>
 					{sending ? '...' : t('send', $locale)}
 				</button>
-				<button class="btn-cancel" onclick={() => { showForm = false; title = ''; body = ''; }}>
+				<button
+					class="btn-cancel"
+					onclick={() => {
+						showForm = false;
+						title = '';
+						body = '';
+					}}
+				>
 					{t('cancel', $locale)}
 				</button>
 			</div>
@@ -138,7 +149,11 @@
 						<div class="ann-meta-right">
 							<span class="ann-time">{formatTime(a.created_at)}</span>
 							{#if isOwner}
-								<button class="btn-circle-del" onclick={() => handleDelete(a.id)} title={t('delete', $locale)}>×</button>
+								<button
+									class="btn-circle-del"
+									onclick={() => handleDelete(a.id)}
+									title={t('delete', $locale)}>×</button
+								>
 							{/if}
 						</div>
 					</div>
@@ -151,10 +166,6 @@
 
 <style>
 	.announcement-panel {
-		background: var(--color-bg-1);
-		border-radius: 0.75rem;
-		padding: 1rem;
-		border: 1px solid var(--color-border);
 	}
 	.ann-header {
 		display: flex;
