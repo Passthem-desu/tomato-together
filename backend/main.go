@@ -13,6 +13,7 @@ import (
 	"tomatogether/backend/internal/api"
 	"tomatogether/backend/internal/repository"
 	"tomatogether/backend/internal/service"
+	"tomatogether/backend/internal/sse"
 )
 
 func main() {
@@ -45,6 +46,11 @@ func main() {
 	repo := repository.New(db)
 	svc := service.New(repo)
 	handler := api.New(svc)
+
+	// 初始化 SSE Hub
+	hub := sse.NewHub(repo)
+	go hub.Run()
+	defer hub.Stop()
 
 	// 创建路由器
 	r := mux.NewRouter()
@@ -183,6 +189,12 @@ func initDB(db *sql.DB) error {
 			leader_id TEXT,
 			started_at DATETIME NOT NULL,
 			ended_at DATETIME,
+			paused_at DATETIME,
+			rest_duration INTEGER NOT NULL DEFAULT 0,
+			is_long_break INTEGER NOT NULL DEFAULT 0,
+			planned_rest_duration INTEGER NOT NULL DEFAULT 300,
+			planned_long_break_duration INTEGER NOT NULL DEFAULT 900,
+			sessions_before_long_break INTEGER NOT NULL DEFAULT 4,
 			FOREIGN KEY (member_id) REFERENCES room_members(id) ON DELETE CASCADE,
 			FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
 			FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,

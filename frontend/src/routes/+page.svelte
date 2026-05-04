@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { currentMember } from '$lib/store';
-  import { getMember, isAuthenticated } from '$lib/api';
+  import { currentMember, currentRoom } from '$lib/store';
+  import { getMember, getRoom, isAuthenticated } from '$lib/api';
   import { locale, locales, t, type Locale } from '$lib/i18n';
 
   let showLangMenu = $state(false);
@@ -12,6 +12,10 @@
       const member = getMember();
       if (member) {
         currentMember.set(member);
+        const room = getRoom();
+        if (room) {
+          currentRoom.set(room);
+        }
         goto('/room');
       }
     }

@@ -161,7 +161,31 @@ tomatogether/
 | `updated_at` | datetime | 更新时间 |
 | `completed_at` | datetime | 完成时间（可选，状态改为非 DONE 时清空） |
 
-### 3.6 番茄记录 (PomodoroSession)
+### 3.6 番茄记录 (PomodoroSession) — 同时也是番茄状态机
+
+> **设计理念**：PomodoroSession 不仅记录历史，还编码用户的实时番茄状态。
+> 服务端是唯一真相源，SSE 广播状态变化，客户端只发送操作意图。
+
+**状态映射**（单行即状态）：
+
+| 行条件 | 番茄状态 |
+|--------|---------|
+| 无 `ended_at IS NULL` 的行 | `idle` |
+| `ended_at IS NULL` + `paused_at IS NULL` | `focusing` |
+| `ended_at IS NULL` + `paused_at IS NOT NULL` | `paused` |
+| 最近一行 `ended_at` + `rest_duration` > now | `rest`（短休/长休） |
+
+**状态流转**：
+
+```
+ idle ──[start]──→ focusing ──[pause]──→ paused
+   ↑                  │  ↑                    │
+   │            [end] │  └──[resume]───       │
+   │                  ↓                 │     │
+   │                rest ←──────────────┘     │
+   │                  │                       │
+   └──[skip/timeout]──┘      [stop/abort]─────┘
+```
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -170,12 +194,20 @@ tomatogether/
 | `room_id` | UUID | 所在房间 ID |
 | `project_id` | UUID | 关联项目 ID（可选） |
 | `task_id` | UUID | 关联 WIP ID（可选） |
-| `duration` | int | 实际专注时长（秒） |
-| `planned_duration` | int | 计划时长（秒，默认 1500） |
-| `is_followed` | bool | 是否是跟随他人的 session |
+| `duration` | int | 实际专注时长（秒），结束时填入 |
+| `planned_duration` | int | 计划专注时长（秒，默认 1500） |
+| `is_followed` | bool | 是否跟随他人的 session |
 | `leader_id` | UUID | 主导者成员 ID（跟随时） |
-| `started_at` | datetime | 开始时间 |
-| `ended_at` | datetime | 结束时间 |
+| `started_at` | datetime | 专注开始时间 |
+| `ended_at` | datetime | 专注结束时间（NULL = 活跃中） |
+| `paused_at` | datetime | **新增** — 暂停时间（NULL = 未暂停） |
+| `rest_duration` | int | **新增** — 休息时长（秒），结束时填入 |
+| `is_long_break` | bool | **新增** — 是否为长休息 |
+
+> **GetPomodoroStatus 逻辑**：
+> 1. 查 `member_id` 对应 `ended_at IS NULL` 的行 → focusing / paused
+> 2. 否则查最近一行，若 `ended_at + rest_duration > now` → rest
+> 3. 否则 → idle
 
 ### 3.7 用户状态 (UserStatus)
 

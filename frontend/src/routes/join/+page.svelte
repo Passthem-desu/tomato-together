@@ -85,8 +85,8 @@
         if (userExists && userIsPersistent) {
           step = 'user_password';
         } else if (userExists && !userIsPersistent) {
-          error.set(t('username_taken_anonymous', $locale));
-          userExists = false;
+          // Anonymous user exists - allow re-join (set password to upgrade or join as anonymous)
+          step = 'create_user';
         } else {
           step = 'create_user';
         }

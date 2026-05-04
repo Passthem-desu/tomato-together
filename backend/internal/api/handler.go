@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"tomatogether/backend/internal/models"
 	"tomatogether/backend/internal/service"
+	"tomatogether/backend/internal/sse"
 )
 
 type contextKey string
@@ -27,6 +29,9 @@ func New(svc *service.Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(r *mux.Router) {
+	// SSE stream endpoint (no auth middleware, handles own auth via query param)
+	r.HandleFunc("/rooms/{name}/sse", h.HandleSSE).Methods(http.MethodGet)
+
 	// L1 Routes
 	r.HandleFunc("/rooms/{name}", h.GetRoomInfo).Methods(http.MethodGet)
 	r.HandleFunc("/rooms/{name}/join", h.JoinRoom).Methods(http.MethodPost)
@@ -50,6 +55,9 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	authRouter.HandleFunc("/pomodoro/follow", h.FollowPomodoro).Methods(http.MethodPost)
 	authRouter.HandleFunc("/pomodoro/unfollow", h.UnfollowPomodoro).Methods(http.MethodPost)
 	authRouter.HandleFunc("/pomodoro/end", h.EndPomodoro).Methods(http.MethodPost)
+	authRouter.HandleFunc("/pomodoro/pause", h.PausePomodoro).Methods(http.MethodPost)
+	authRouter.HandleFunc("/pomodoro/resume", h.ResumePomodoro).Methods(http.MethodPost)
+	authRouter.HandleFunc("/pomodoro/skip-rest", h.SkipRest).Methods(http.MethodPost)
 	authRouter.HandleFunc("/pomodoro/status", h.GetPomodoroStatus).Methods(http.MethodGet)
 	authRouter.HandleFunc("/status", h.UpdateStatus).Methods(http.MethodPut)
 	authRouter.HandleFunc("/status", h.DeleteStatus).Methods(http.MethodDelete)
@@ -122,6 +130,13 @@ func (h *Handler) writeError(w http.ResponseWriter, status int, err string) {
 
 func (h *Handler) parseJSON(r *http.Request, v interface{}) error {
 	return json.NewDecoder(r.Body).Decode(v)
+}
+
+// writeSSEEvent writes a single SSE event to the response writer
+func (h *Handler) writeSSEEvent(w http.ResponseWriter, event string, data interface{}) {
+	dataJSON, _ := json.Marshal(data)
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, string(dataJSON))
+	w.(http.Flusher).Flush()
 }
 
 // L1 Handlers
@@ -593,6 +608,67 @@ func (h *Handler) GetPomodoroStatus(w http.ResponseWriter, r *http.Request) {
 
 // Status handlers
 
+// Pause / Resume / SkipRest handlers
+
+func (h *Handler) PausePomodoro(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+
+	resp, err := h.svc.PausePomodoro(token.Token)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    resp,
+	})
+}
+
+func (h *Handler) ResumePomodoro(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+
+	resp, err := h.svc.ResumePomodoro(token.Token)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    resp,
+	})
+}
+
+func (h *Handler) SkipRest(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+
+	err := h.svc.SkipRest(token.Token)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]string{
+			"phase": "idle",
+		},
+	})
+}
+
 func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	token := GetTokenFromContext(r.Context())
 	if token == nil {
@@ -923,4 +999,119 @@ func (h *Handler) GetAnnouncements(w http.ResponseWriter, r *http.Request) {
 			"announcements": announcements,
 		},
 	})
+}
+
+// SSE Handler for real-time events
+
+func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	roomName := vars["name"]
+
+	// Get room info to validate room exists
+	room, err := h.svc.GetRoomInfo(roomName)
+	if err != nil {
+		h.writeError(w, http.StatusNotFound, "room_not_found")
+		return
+	}
+
+	// Check for token in query param (upgrades to L2)
+	tokenValue := r.URL.Query().Get("token")
+	var memberID, username string
+	var isOwner, isAuth bool
+
+	if tokenValue != "" {
+		// Validate token
+		token, err := h.svc.ValidateToken(tokenValue)
+		if err == nil && token.RoomID == room.ID {
+			memberID = token.MemberID
+			isAuth = true
+
+			// Get member info
+			member, err := h.svc.GetMe(tokenValue)
+			if err == nil {
+				username = member.Username
+				isOwner = member.IsOwner
+
+				// Update heartbeat
+				h.svc.RefreshToken(tokenValue)
+			}
+		} else if err != nil && tokenValue != "" {
+			// Token is invalid or expired - send token_expired and close
+			h.writeSSEEvent(w, "token_expired", map[string]interface{}{
+				"message": "Token 已过期或无效，请重新加入房间",
+			})
+			return
+		}
+	}
+
+	// Create SSE client
+	hub := sse.GetHub()
+	if hub == nil {
+		h.writeError(w, http.StatusInternalServerError, "sse_unavailable")
+		return
+	}
+
+	client := hub.NewClient(roomName, memberID, username, isOwner, isAuth)
+	client.Register()
+	defer client.Unregister()
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// If not authenticated (L1旁观者), send token_expired message periodically
+	if !isAuth {
+		// Send initial message indicating read-only mode
+		initialData, _ := json.Marshal(map[string]interface{}{
+			"message": "旁观模式 - 仅可查看",
+		})
+		fmt.Fprintf(w, "event: connected\ndata: %s\n\n", string(initialData))
+		w.(http.Flusher).Flush()
+	}
+
+	// Create heartbeat ticker
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	// Channel to detect client disconnect
+	closeNotify := w.(http.CloseNotifier).CloseNotify()
+
+	for {
+		select {
+		case msg, ok := <-client.Notify():
+			if !ok {
+				return
+			}
+			w.Write(msg)
+			w.(http.Flusher).Flush()
+
+		case <-ticker.C:
+			// Check if token is still valid (for authenticated clients)
+			if isAuth && tokenValue != "" {
+				token, err := h.svc.ValidateToken(tokenValue)
+				if err != nil {
+					// Token expired - notify and close connection
+					h.writeSSEEvent(w, "token_expired", map[string]interface{}{
+						"message": "Token 已过期，请重新加入房间",
+					})
+					return
+				}
+
+				// Update heartbeat and refresh token
+				h.svc.RefreshToken(tokenValue)
+				client.Ping()
+				_ = token
+			}
+
+			// Send ping to keep connection alive
+			hub.BroadcastEvent(roomName, "ping", map[string]interface{}{
+				"timestamp": time.Now().Format(time.RFC3339),
+			})
+
+		case <-closeNotify:
+			return
+		}
+	}
 }

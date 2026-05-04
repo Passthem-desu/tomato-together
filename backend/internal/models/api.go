@@ -54,32 +54,34 @@ type StatusInfo struct {
 	Message string `json:"message"`
 }
 
-// PomodoroInfo contains user pomodoro information
+// PomodoroInfo contains user pomodoro information (for user list)
 type PomodoroInfo struct {
-	IsActive        bool   `json:"is_active"`
-	IsFollowing     bool   `json:"is_following"`
-	LeaderUsername  string `json:"leader_username,omitempty"`
-	StartedAt       string `json:"started_at,omitempty"`
-	RemainingSeconds int   `json:"remaining_seconds,omitempty"`
+	Phase            string `json:"phase"`
+	IsFollowing      bool   `json:"is_following"`
+	LeaderUsername   string `json:"leader_username,omitempty"`
+	StartedAt        string `json:"started_at,omitempty"`
+	RemainingSeconds int    `json:"remaining_seconds,omitempty"`
 }
 
 // PomodoroStatusResponse is the response for pomodoro status
+// Phase replaces the old is_active + status fields
 type PomodoroStatusResponse struct {
-	IsActive          bool   `json:"is_active"`
-	Status            string `json:"status"`
-	SessionID         string `json:"session_id,omitempty"`
-	StartedAt         string `json:"started_at,omitempty"`
-	RemainingSeconds  int    `json:"remaining_seconds,omitempty"`
-	LeaderID          string `json:"leader_id,omitempty"`
-	LeaderUsername    string `json:"leader_username,omitempty"`
-	PlannedDuration   int    `json:"planned_duration,omitempty"`
-	RestDuration      int    `json:"rest_duration,omitempty"`
-	LongBreakDuration int    `json:"long_break_duration,omitempty"`
+	Phase              string `json:"phase"`
+	SessionID          string `json:"session_id,omitempty"`
+	StartedAt          string `json:"started_at,omitempty"`
+	PausedAt           string `json:"paused_at,omitempty"`
+	RemainingSeconds   int    `json:"remaining_seconds,omitempty"`
+	LeaderID           string `json:"leader_id,omitempty"`
+	LeaderUsername     string `json:"leader_username,omitempty"`
+	PlannedDuration    int    `json:"planned_duration,omitempty"`
+	RestDuration       int    `json:"rest_duration,omitempty"`
+	LongBreakDuration  int    `json:"long_break_duration,omitempty"`
 	SessionsBeforeLongBreak int `json:"sessions_before_long_break,omitempty"`
-	Duration          int    `json:"duration,omitempty"`
-	IsFollowed        bool   `json:"is_followed,omitempty"`
-	ShouldTakeLongBreak bool `json:"should_take_long_break,omitempty"`
-	SessionsCompleted int    `json:"sessions_completed,omitempty"`
+	Duration           int    `json:"duration,omitempty"`
+	IsFollowed         bool   `json:"is_followed,omitempty"`
+	IsLongBreak        bool   `json:"is_long_break,omitempty"`
+	ShouldTakeLongBreak bool  `json:"should_take_long_break,omitempty"`
+	SessionsCompleted  int    `json:"sessions_completed,omitempty"`
 }
 
 // CreateRoomRequest is the request for creating a room

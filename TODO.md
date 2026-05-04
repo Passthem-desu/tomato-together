@@ -23,25 +23,29 @@
 #### 房间系统
 - [x] 房间 CRUD（创建/加入/离开）
 - [x] 创建房间时同时创建房主成员
-- [ ] 房主设置和管理
-- [ ] 旁观者模式
-- [ ] Heartbeat 机制（保活/防手滑）
+- [x] 房主设置和管理
+- [x] Heartbeat 机制（保活/防手滑）
+- [x] SSE L1 旁观（只读事件流）
 
 #### 成员系统
 - [x] 成员注册/登录（房间内）
-- [ ] 匿名用户升级为持久化用户
+- [x] 匿名用户升级为持久化用户
 - [x] RoomToken 生成和验证
 
 #### 实时通信
-- [ ] SSE 连接管理
-- [ ] SSE 事件推送
-- [ ] SSE 心跳（5 秒 tick / 30 秒 ping）
-- [ ] Token 过期降级机制
+- [x] SSE 连接管理
+- [x] SSE 事件推送
+- [x] SSE 心跳（5 秒 tick / 30 秒 ping）
+- [x] Token 过期降级机制
 
 #### 番茄系统
 - [x] 开始/结束番茄
 - [x] 独立计时 vs 跟随计时
 - [x] 番茄记录持久化
+- [x] 服务端状态机（paused/rest/idle 阶段 + 暂停/继续/跳过 API）
+- [x] SSE phase_changed 事件（tick 已含 phase）
+- [x] 休息倒计时（服务端惰性结束）
+- [x] 前端对接 Phase 模型（暂停/继续/跳过按钮）
 
 #### 状态系统
 - [x] 用户状态（emoji + message）
@@ -68,6 +72,13 @@
 - [ ] 主题切换
 - [ ] 文档完善
 
+#### 代码规范
+- [ ] 添加 ESLint 配置（前端）
+- [ ] 添加 Prettier 配置（前端）
+- [ ] 添加 `.editorconfig` 统一编辑器配置
+- [ ] 添加 `.golangci.yml` 配置（后端 lint）
+- [ ] 配置 Git Hooks（pre-commit format/lint）
+
 ---
 
 ## 🐛 Bug 修复
@@ -78,10 +89,20 @@
 - [x] **Bug #3: 房主逻辑错误** - 新用户有密码就成为房主的问题已修复
 - [x] **Bug #4: 离开房间删除成员** - 离开房间时只删除 token
 - [x] **Bug #5: 时间单位混淆** - 输入框现在使用分钟为单位
+- [x] **Bug #6: 用户加入/退出不显示** - 所有重登路径加上 user_joined 广播
+- [x] **Bug #7: 其他用户番茄不走表** - 添加本地预测倒计时（每秒插值）
+- [x] **Bug #8: 刷新页面后无法开番茄** - 修复 currentRoom 未持久化恢复
+- [x] **Bug #9: 匿名用户无法重登** - 允许匿名用户复用已有数据
+- [x] **Bug #10: 新用户不显示在在线列表** - Hub 注册后广播 user_joined
+- [x] **Bug #11: 番茄结束不自动进入休息** - 倒计时归零自动调用 endPomodoro
+- [x] **Bug #12: 刷新后番茄状态丢失** - onMount 调用 getPomodoroStatus 恢复
+- [x] **Bug #13: 已在番茄中时错误提示模糊** - 添加 already_following 翻译
+- [x] **Bug #14: 离开房间番茄未中止** - LeaveRoom 调用 EndActiveSession
+- [x] **Bug #15: 重登后在线状态延迟** - 移除 service 层 user_joined 竞态广播
 
 ### 改进项
-- [ ] **Improve #1: 分离事件循环** - 轮询 users 和计时器应使用独立定时器
-- [ ] **Improve #2: 在线状态显示** - 显示用户是否在线（基于心跳）
+- [x] **Improve #1: 分离事件循环** - SSE 驱动用户状态，独立 1s 计时器
+- [x] **Improve #2: 在线状态显示** - 基于 SSE 心跳显示用户在线/离线
 
 ---
 
@@ -117,6 +138,7 @@
 | D-019 | 离开房间 | 只删除 RoomToken，不删除成员记录（`is_owner` 标记保留） |
 | D-020 | **登录流程** | 分步骤引导用户完成登录（房间名 → 房间密码 → 用户名 → 用户密码） |
 | D-021 | **在线状态** | 基于心跳时间判断用户是否在线（2分钟超时视为离线） |
+| D-022 | **番茄状态机** | PomodoroSession 即状态机：ended_at IS NULL=活跃，paused_at=暂停，rest_duration>0=休息中 |
 
 ### 历史设计决策（已废弃）
 
@@ -176,7 +198,8 @@ projects (id, member_id, room_id, name, created_at)
 tasks (id, client_id, member_id, room_id, project_id, title, status, ...)
 
 -- 番茄记录表（关联 member_id 和 room_id）
-pomodoro_sessions (id, member_id, room_id, leader_id, ...)
+pomodoro_sessions (id, member_id, room_id, leader_id, ..., 
+                   paused_at, rest_duration, is_long_break)
 
 -- 用户状态表（关联 member_id 和 room_id）
 user_statuses (id, member_id, room_id, emoji, message, updated_at)

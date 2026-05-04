@@ -28,9 +28,9 @@
   /* ============================================
      Brand Colors (Blue/Purple ~270°)
      ============================================ */
-  --color-brand: light-dark(oklch(50% 0.2 270), oklch(75% 0.2 270));
-  --color-brand-hover: light-dark(oklch(45% 0.22 270), oklch(70% 0.22 270));
-  --color-brand-subtle: light-dark(oklch(95% 0.15 270), oklch(30% 0.15 270));
+  --color-brand: light-dark(oklch(50% 0.2 190), oklch(75% 0.2 190));
+  --color-brand-hover: light-dark(oklch(45% 0.22 190), oklch(70% 0.22 190));
+  --color-brand-subtle: light-dark(oklch(80% 0.06 190), oklch(30% 0.15 190));
 
   /* ============================================
      Semantic Colors
@@ -61,16 +61,20 @@
   /* ============================================
      Shadows (minimal, use backdrop instead)
      ============================================ */
-  --shadow-sm: 0 1px 2px light-dark(rgba(0,0,0,0.06), rgba(0,0,0,0.3));
-  --shadow-md: 0 4px 6px -1px light-dark(rgba(0,0,0,0.08), rgba(0,0,0,0.4));
-  --shadow-lg: 0 10px 15px -3px light-dark(rgba(0,0,0,0.1), rgba(0,0,0,0.5));
+  --shadow-sm: 0 1px 2px light-dark(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.3));
+  --shadow-md: 0 4px 6px -1px
+    light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.4));
+  --shadow-lg: 0 10px 15px -3px
+    light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.5));
 
   /* ============================================
      Typography
      ============================================ */
-  --font-sans: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  
+  --font-sans:
+    "Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
@@ -123,16 +127,29 @@ body {
 /* ============================================
    Typography
    ============================================ */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-weight: 600;
   line-height: var(--leading-tight);
   color: var(--color-fg-0);
 }
 
-h1 { font-size: var(--text-4xl); }
-h2 { font-size: var(--text-2xl); }
-h3 { font-size: var(--text-xl); }
-h4 { font-size: var(--text-lg); }
+h1 {
+  font-size: var(--text-4xl);
+}
+h2 {
+  font-size: var(--text-2xl);
+}
+h3 {
+  font-size: var(--text-xl);
+}
+h4 {
+  font-size: var(--text-lg);
+}
 
 p {
   color: var(--color-fg-1);
@@ -375,8 +392,13 @@ label {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 /* ============================================
@@ -409,17 +431,37 @@ label {
   justify-content: space-between;
 }
 
-.gap-1 { gap: 0.25rem; }
-.gap-2 { gap: 0.5rem; }
-.gap-3 { gap: 0.75rem; }
-.gap-4 { gap: 1rem; }
-.gap-6 { gap: 1.5rem; }
-.gap-8 { gap: 2rem; }
+.gap-1 {
+  gap: 0.25rem;
+}
+.gap-2 {
+  gap: 0.5rem;
+}
+.gap-3 {
+  gap: 0.75rem;
+}
+.gap-4 {
+  gap: 1rem;
+}
+.gap-6 {
+  gap: 1.5rem;
+}
+.gap-8 {
+  gap: 2rem;
+}
 
-.text-center { text-align: center; }
-.text-muted { color: var(--color-fg-muted); }
-.text-sm { font-size: var(--text-sm); }
-.text-xs { font-size: var(--text-xs); }
+.text-center {
+  text-align: center;
+}
+.text-muted {
+  color: var(--color-fg-muted);
+}
+.text-sm {
+  font-size: var(--text-sm);
+}
+.text-xs {
+  font-size: var(--text-xs);
+}
 
 /* ============================================
    Scrollbar Styling
@@ -472,3 +514,4 @@ label {
     border-radius: var(--radius-lg);
   }
 }
+

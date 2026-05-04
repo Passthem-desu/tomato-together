@@ -600,13 +600,146 @@ GET /api/pomodoro/status
 {
   "success": true,
   "data": {
-    "is_active": true,
-    "status": "focusing",
+    "phase": "focusing",
     "session_id": "uuid-xxx",
     "started_at": "2026-05-04T10:30:00Z",
     "remaining_seconds": 1200,
-    "leader_id": "uuid-xxx（如果正在跟随）",
-    "leader_username": "小红（如果正在跟随）"
+    "planned_duration": 1500,
+    "rest_duration": 300,
+    "is_long_break": false,
+    "is_following": false,
+    "leader_username": null
+  }
+}
+```
+
+> **phase 取值**：`idle` / `focusing` / `paused` / `rest`
+
+### 5.6 暂停番茄
+
+```
+POST /api/pomodoro/pause
+```
+
+**需要认证**: L2
+
+**请求体**:
+```json
+{
+  "room_name": "学习小组"
+}
+```
+
+**响应** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "phase": "paused",
+    "paused_at": "2026-05-04T10:40:00Z",
+    "remaining_seconds": 900
+  }
+}
+```
+
+### 5.7 继续番茄
+
+```
+POST /api/pomodoro/resume
+```
+
+**需要认证**: L2
+
+**请求体**:
+```json
+{
+  "room_name": "学习小组"
+}
+```
+
+**响应** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "phase": "focusing",
+    "remaining_seconds": 900
+  }
+}
+```
+
+### 5.8 跳过休息
+
+```
+POST /api/pomodoro/skip-rest
+```
+
+**需要认证**: L2
+
+**请求体**:
+```json
+{
+  "room_name": "学习小组"
+}
+```
+
+**响应** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "phase": "idle"
+  }
+}
+```
+
+### 5.9 中止番茄（等同 stop）
+
+> 复用 `POST /api/pomodoro/end`，设置 `aborted: true`。
+> 中止意味着跳过休息、直接回到 idle。
+
+**请求体**:
+```json
+{
+  "room_name": "学习小组",
+  "aborted": true
+}
+```
+
+**响应** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "phase": "idle"
+  }
+}
+```
+
+### 5.10 结束番茄（正常）
+
+> 复用 `POST /api/pomodoro/end`，设置 `aborted: false`。
+> 结束后自动进入 rest 阶段。
+
+**请求体**:
+```json
+{
+  "room_name": "学习小组",
+  "aborted": false
+}
+```
+
+**响应** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "phase": "rest",
+    "session_id": "uuid-xxx",
+    "duration": 1500,
+    "rest_duration": 300,
+    "is_long_break": false,
+    "sessions_completed": 1
   }
 }
 ```
@@ -1192,6 +1325,24 @@ GET /api/rooms/:name/sse
 }
 ```
 
+#### `phase_changed`（番茄状态机变迁）
+
+当任何用户的状态机阶段变化时广播。
+
+```json
+{
+  "event": "phase_changed",
+  "data": {
+    "user_id": "uuid-xxx",
+    "username": "小明",
+    "phase": "paused",
+    "remaining_seconds": 900
+  }
+}
+```
+
+> **phase 取值**：`focusing` / `paused` / `rest` / `idle`
+
 #### `tick`（每 5 秒）
 ```json
 {
@@ -1202,8 +1353,8 @@ GET /api/rooms/:name/sse
       {
         "id": "uuid-xxx",
         "username": "小明",
-        "remaining_seconds": 1200,
-        "status": "focusing"
+        "phase": "focusing",
+        "remaining_seconds": 1200
       }
     ]
   }
@@ -1288,6 +1439,9 @@ GET /api/rooms/:name/sse
 | `/api/pomodoro/follow` | POST | L2 |
 | `/api/pomodoro/unfollow` | POST | L2 |
 | `/api/pomodoro/end` | POST | L2 |
+| `/api/pomodoro/pause` | POST | L2 |
+| `/api/pomodoro/resume` | POST | L2 |
+| `/api/pomodoro/skip-rest` | POST | L2 |
 | `/api/pomodoro/status` | GET | L2 |
 | **状态** |
 | `/api/status` | PUT | L2 |

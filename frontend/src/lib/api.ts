@@ -37,7 +37,7 @@ export interface UserInfo {
     message: string;
   };
   pomodoro?: {
-    is_active: boolean;
+    phase: string;
     is_following: boolean;
     leader_username?: string;
     started_at?: string;
@@ -47,17 +47,20 @@ export interface UserInfo {
 }
 
 export interface PomodoroStatus {
-  is_active: boolean;
-  status: 'idle' | 'focusing' | 'following' | 'rest';
+  phase: 'idle' | 'focusing' | 'paused' | 'following' | 'rest';
   session_id?: string;
   started_at?: string;
+  paused_at?: string;
   remaining_seconds?: number;
   leader_id?: string;
   leader_username?: string;
   planned_duration?: number;
   rest_duration?: number;
   long_break_duration?: number;
+  is_long_break?: boolean;
   sessions_before_long_break?: number;
+  duration?: number;
+  sessions_completed?: number;
 }
 
 // API helper
@@ -84,6 +87,14 @@ async function apiRequest<T>(
   const data = await response.json();
   
   if (!response.ok) {
+    // Auth errors → force logout
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('room_name');
+      localStorage.removeItem('member');
+      localStorage.removeItem('room');
+      if (typeof window !== 'undefined') window.location.href = '/';
+    }
     throw new Error(data.error || 'Request failed');
   }
 
@@ -224,19 +235,48 @@ export const api = {
       body: JSON.stringify({ room_name: roomName }),
     });
   },
+
+  // Pause pomodoro
+  pausePomodoro: async (): Promise<{ success: boolean; data: PomodoroStatus }> => {
+    return apiRequest('/pomodoro/pause', { method: 'POST' });
+  },
+
+  // Resume pomodoro
+  resumePomodoro: async (): Promise<{ success: boolean; data: PomodoroStatus }> => {
+    return apiRequest('/pomodoro/resume', { method: 'POST' });
+  },
+
+  // Skip rest
+  skipRest: async (): Promise<{ success: boolean }> => {
+    return apiRequest('/pomodoro/skip-rest', { method: 'POST' });
+  },
 };
 
 // Store helpers
-export function saveAuth(token: string, roomName: string, member: Member) {
+export function saveAuth(token: string, roomName: string, member: Member, room?: Room) {
   localStorage.setItem('token', token);
   localStorage.setItem('room_name', roomName);
   localStorage.setItem('member', JSON.stringify(member));
+  if (room) {
+    localStorage.setItem('room', JSON.stringify(room));
+  }
 }
 
 export function clearAuth() {
   localStorage.removeItem('token');
   localStorage.removeItem('room_name');
   localStorage.removeItem('member');
+  localStorage.removeItem('room');
+}
+
+export function getRoom(): Room | null {
+  const roomStr = localStorage.getItem('room');
+  if (!roomStr) return null;
+  try {
+    return JSON.parse(roomStr);
+  } catch {
+    return null;
+  }
 }
 
 export function getMember(): Member | null {
