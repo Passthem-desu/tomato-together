@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+.svelte-kit/
+package-lock.json
+pnpm-lock.yaml
+*.min.js
+*.min.css
+backend/bin/
+backend/data/

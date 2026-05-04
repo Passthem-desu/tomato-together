@@ -971,8 +971,8 @@ func (h *Handler) CreateAnnouncement(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data": map[string]interface{}{
-			"message":          "公告已发送",
-			"announcement_id":  announcement.ID,
+			"message":         "公告已发送",
+			"announcement_id": announcement.ID,
 		},
 	})
 }

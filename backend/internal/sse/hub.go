@@ -13,17 +13,17 @@ import (
 
 // Hub manages all room connections and broadcasts events
 type Hub struct {
-	rooms    map[string]map[*Client]bool // room name -> clients
-	register chan *Client
+	rooms      map[string]map[*Client]bool // room name -> clients
+	register   chan *Client
 	unregister chan *Client
-	broadcast chan *Message
-	mu        sync.RWMutex
-	repo      *repository.Repository
-	
+	broadcast  chan *Message
+	mu         sync.RWMutex
+	repo       *repository.Repository
+
 	// Heartbeat configuration
 	heartbeatTimeout time.Duration // 2 minutes
-	tickInterval      time.Duration // 5 seconds
-	
+	tickInterval     time.Duration // 5 seconds
+
 	stopCh chan struct{}
 	wg     sync.WaitGroup
 }
@@ -53,18 +53,18 @@ var globalHub *Hub
 // NewHub creates a new Hub instance
 func NewHub(repo *repository.Repository) *Hub {
 	hub := &Hub{
-		rooms:       make(map[string]map[*Client]bool),
+		rooms:      make(map[string]map[*Client]bool),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		broadcast:  make(chan *Message, 256),
 		repo:       repo,
-		
+
 		heartbeatTimeout: 2 * time.Minute,
 		tickInterval:     5 * time.Second,
-		
+
 		stopCh: make(chan struct{}),
 	}
-	
+
 	globalHub = hub
 	return hub
 }
@@ -74,11 +74,11 @@ func (h *Hub) Run() {
 	// Heartbeat checker goroutine
 	h.wg.Add(1)
 	go h.runHeartbeatChecker()
-	
+
 	// Tick broadcaster goroutine
 	h.wg.Add(1)
 	go h.runTickBroadcaster()
-	
+
 	for {
 		select {
 		case client := <-h.register:
@@ -88,33 +88,33 @@ func (h *Hub) Run() {
 			}
 			h.rooms[client.RoomName][client] = true
 			h.mu.Unlock()
-			
+
 			log.Printf("Client registered: room=%s, member=%s", client.RoomName, client.MemberID)
-			
+
 			// Broadcast user_joined when authenticated client connects
 			if client.IsAuth && client.MemberID != "" {
 				h.broadcastToRoom(client.RoomName, "user_joined", map[string]interface{}{
 					"user": map[string]interface{}{
-						"id":       client.MemberID,
-						"username": client.Username,
+						"id":        client.MemberID,
+						"username":  client.Username,
 						"is_online": true,
 					},
 				})
 			}
-			
+
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if clients, ok := h.rooms[client.RoomName]; ok {
 				if _, ok := clients[client]; ok {
 					delete(clients, client)
 					close(client.notify)
-					
+
 					// Notify others that user left
 					h.broadcastToRoom(client.RoomName, "user_left", map[string]interface{}{
 						"user_id":  client.MemberID,
 						"username": client.Username,
 					})
-					
+
 					// If last client in room, clean up
 					if len(clients) == 0 {
 						delete(h.rooms, client.RoomName)
@@ -122,9 +122,9 @@ func (h *Hub) Run() {
 				}
 			}
 			h.mu.Unlock()
-			
+
 			log.Printf("Client unregistered: room=%s, member=%s", client.RoomName, client.MemberID)
-			
+
 		case message := <-h.broadcast:
 			h.mu.RLock()
 			if clients, ok := h.rooms[message.RoomName]; ok {
@@ -139,7 +139,7 @@ func (h *Hub) Run() {
 				}
 			}
 			h.mu.RUnlock()
-			
+
 		case <-h.stopCh:
 			return
 		}
@@ -208,21 +208,21 @@ func (h *Hub) broadcastToRoom(roomName, event string, data interface{}) {
 // GetOnlineUsers returns all online users in a room based on heartbeat
 func (h *Hub) GetOnlineUsers(roomName string) []*models.UserInfo {
 	users := make([]*models.UserInfo, 0)
-	
+
 	h.mu.RLock()
 	clients := h.rooms[roomName]
 	h.mu.RUnlock()
-	
+
 	for client := range clients {
 		user := &models.UserInfo{
-			ID:         client.MemberID,
-			Username:   client.Username,
-			IsOwner:    client.IsOwner,
-			IsOnline:   true,
+			ID:       client.MemberID,
+			Username: client.Username,
+			IsOwner:  client.IsOwner,
+			IsOnline: true,
 		}
 		users = append(users, user)
 	}
-	
+
 	return users
 }
 
@@ -230,7 +230,7 @@ func (h *Hub) GetOnlineUsers(roomName string) []*models.UserInfo {
 func (h *Hub) runHeartbeatChecker() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -241,13 +241,13 @@ func (h *Hub) runHeartbeatChecker() {
 						// Client is stale, unregister
 						delete(clients, client)
 						close(client.notify)
-						
+
 						// Notify others
 						h.broadcastToRoom(roomName, "user_left", map[string]interface{}{
 							"user_id":  client.MemberID,
 							"username": client.Username,
 						})
-						
+
 						log.Printf("Client timed out: room=%s, member=%s", roomName, client.MemberID)
 					}
 				}
@@ -256,7 +256,7 @@ func (h *Hub) runHeartbeatChecker() {
 				}
 			}
 			h.mu.Unlock()
-			
+
 		case <-h.stopCh:
 			return
 		}
@@ -267,7 +267,7 @@ func (h *Hub) runHeartbeatChecker() {
 func (h *Hub) runTickBroadcaster() {
 	ticker := time.NewTicker(h.tickInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -276,13 +276,13 @@ func (h *Hub) runTickBroadcaster() {
 				if len(clients) == 0 {
 					continue
 				}
-				
+
 				// Build user states for tick
 				users := make([]map[string]interface{}, 0)
 				for client := range clients {
 					var remainingSeconds int
 					var phase = "idle"
-					
+
 					session, err := h.repo.GetActiveSessionByMemberID(client.MemberID)
 					if err == nil && session != nil {
 						elapsed := int(time.Since(session.StartedAt).Seconds())
@@ -291,7 +291,7 @@ func (h *Hub) runTickBroadcaster() {
 							remaining = 0
 						}
 						remainingSeconds = remaining
-						
+
 						if session.PausedAt != nil {
 							phase = "paused"
 							pausedElapsed := int(session.PausedAt.Sub(session.StartedAt).Seconds())
@@ -319,22 +319,22 @@ func (h *Hub) runTickBroadcaster() {
 							}
 						}
 					}
-					
+
 					users = append(users, map[string]interface{}{
-						"id":               client.MemberID,
-						"username":         client.Username,
+						"id":                client.MemberID,
+						"username":          client.Username,
 						"remaining_seconds": remainingSeconds,
-						"phase":            phase,
+						"phase":             phase,
 					})
 				}
-				
+
 				// Broadcast tick
 				data, _ := json.Marshal(map[string]interface{}{
 					"timestamp": time.Now().Format(time.RFC3339),
 					"users":     users,
 				})
 				event := fmt.Sprintf("event: tick\ndata: %s\n\n", string(data))
-				
+
 				for client := range clients {
 					select {
 					case client.notify <- []byte(event):
@@ -343,7 +343,7 @@ func (h *Hub) runTickBroadcaster() {
 				}
 			}
 			h.mu.RUnlock()
-			
+
 		case <-h.stopCh:
 			return
 		}

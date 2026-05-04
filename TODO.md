@@ -73,11 +73,11 @@
 - [ ] 文档完善
 
 #### 代码规范
-- [ ] 添加 ESLint 配置（前端）
-- [ ] 添加 Prettier 配置（前端）
-- [ ] 添加 `.editorconfig` 统一编辑器配置
-- [ ] 添加 `.golangci.yml` 配置（后端 lint）
-- [ ] 配置 Git Hooks（pre-commit format/lint）
+- [x] 添加 ESLint 配置（前端）
+- [x] 添加 Prettier 配置（前端）
+- [x] 添加 `.editorconfig` 统一编辑器配置
+- [x] 添加 `.golangci.yml` 配置（后端 lint）
+- [x] 配置 Git Hooks（pre-commit format/lint）
 
 ---
 
@@ -103,6 +103,16 @@
 ### 改进项
 - [x] **Improve #1: 分离事件循环** - SSE 驱动用户状态，独立 1s 计时器
 - [x] **Improve #2: 在线状态显示** - 基于 SSE 心跳显示用户在线/离线
+- [x] **Improve #3: 休息结束通知** - 补充 `handleSkip` 中缺失的通知；新增通知开关设置
+
+### 待修复
+- [ ] **Bug #16: 浏览器通知开关未持久化** - 通知选项（`notifications_enabled`）仅在内存中，刷新页面后丢失设置
+- [ ] **Bug #17: 自带通知音缺少多语言翻译** - 音效名称（如 "focus_start"、"focus_end" 等）在设置面板中直接显示 key，未根据当前语言翻译
+
+### 待改进
+- [x] **Align #1: 文档与代码库对齐** - PRD.md、API.md 与实际实现之间可能存在偏差，需要逐接口、逐模型核对并更新文档
+- [ ] **Refactor #1: 房间页面解耦** - `+page.svelte` 目前已超过 500 行，包含计时器、设置、音效、通知、用户列表等混杂逻辑，考虑拆分为独立组件
+- [x] **Refactor #2: i18n 文件整理** - `index.ts` 中存在 zh-hant 段落混入日语、重复 key 等问题，已重新梳理各语言段落
 
 ---
 
@@ -211,5 +221,5 @@ announcements (id, room_id, sender_id, title, body, created_at)
 ---
 
 *创建时间：2026-05-04*
-*最后更新：2026-05-04（登录流程改进 / 在线状态）*
+*最后更新：2026-05-04（代码规范配置完成 / i18n 整理完成 / 新增 Bug #16 #17）*
 *历史版本：v1.0（全局用户系统，已废弃）*

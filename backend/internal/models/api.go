@@ -9,9 +9,9 @@ type APIResponse struct {
 
 // RoomResponse is the response for room operations
 type RoomResponse struct {
-	Room    *RoomInfo    `json:"room"`
-	Member  *MemberInfo  `json:"member"`
-	Token   string       `json:"token"`
+	Room   *RoomInfo   `json:"room"`
+	Member *MemberInfo `json:"member"`
+	Token  string      `json:"token"`
 }
 
 // RoomInfo contains room information for responses
@@ -24,28 +24,28 @@ type RoomInfo struct {
 
 // UserCheckResponse is the response for checking if a username exists
 type UserCheckResponse struct {
-	Exists      bool `json:"exists"`
+	Exists       bool `json:"exists"`
 	IsPersistent bool `json:"is_persistent"`
 }
 
 // MemberInfo contains member information for responses
 type MemberInfo struct {
-	ID           string    `json:"id"`
-	Username     string    `json:"username"`
-	IsOwner      bool      `json:"is_owner"`
-	IsPersistent bool      `json:"is_persistent"`
-	JoinedAt     string    `json:"joined_at,omitempty"`
+	ID           string `json:"id"`
+	Username     string `json:"username"`
+	IsOwner      bool   `json:"is_owner"`
+	IsPersistent bool   `json:"is_persistent"`
+	JoinedAt     string `json:"joined_at,omitempty"`
 }
 
 // UserInfo contains detailed user information for responses
 type UserInfo struct {
-	ID       string     `json:"id"`
-	Username string     `json:"username"`
-	IsOwner  bool       `json:"is_owner"`
-	IsPersistent bool   `json:"is_persistent"`
-	Status   *StatusInfo `json:"status,omitempty"`
-	Pomodoro *PomodoroInfo `json:"pomodoro,omitempty"`
-	IsOnline bool       `json:"is_online"`
+	ID           string        `json:"id"`
+	Username     string        `json:"username"`
+	IsOwner      bool          `json:"is_owner"`
+	IsPersistent bool          `json:"is_persistent"`
+	Status       *StatusInfo   `json:"status,omitempty"`
+	Pomodoro     *PomodoroInfo `json:"pomodoro,omitempty"`
+	IsOnline     bool          `json:"is_online"`
 }
 
 // StatusInfo contains user status information
@@ -66,22 +66,22 @@ type PomodoroInfo struct {
 // PomodoroStatusResponse is the response for pomodoro status
 // Phase replaces the old is_active + status fields
 type PomodoroStatusResponse struct {
-	Phase              string `json:"phase"`
-	SessionID          string `json:"session_id,omitempty"`
-	StartedAt          string `json:"started_at,omitempty"`
-	PausedAt           string `json:"paused_at,omitempty"`
-	RemainingSeconds   int    `json:"remaining_seconds,omitempty"`
-	LeaderID           string `json:"leader_id,omitempty"`
-	LeaderUsername     string `json:"leader_username,omitempty"`
-	PlannedDuration    int    `json:"planned_duration,omitempty"`
-	RestDuration       int    `json:"rest_duration,omitempty"`
-	LongBreakDuration  int    `json:"long_break_duration,omitempty"`
-	SessionsBeforeLongBreak int `json:"sessions_before_long_break,omitempty"`
-	Duration           int    `json:"duration,omitempty"`
-	IsFollowed         bool   `json:"is_followed,omitempty"`
-	IsLongBreak        bool   `json:"is_long_break,omitempty"`
-	ShouldTakeLongBreak bool  `json:"should_take_long_break,omitempty"`
-	SessionsCompleted  int    `json:"sessions_completed,omitempty"`
+	Phase                   string `json:"phase"`
+	SessionID               string `json:"session_id,omitempty"`
+	StartedAt               string `json:"started_at,omitempty"`
+	PausedAt                string `json:"paused_at,omitempty"`
+	RemainingSeconds        int    `json:"remaining_seconds,omitempty"`
+	LeaderID                string `json:"leader_id,omitempty"`
+	LeaderUsername          string `json:"leader_username,omitempty"`
+	PlannedDuration         int    `json:"planned_duration,omitempty"`
+	RestDuration            int    `json:"rest_duration,omitempty"`
+	LongBreakDuration       int    `json:"long_break_duration,omitempty"`
+	SessionsBeforeLongBreak int    `json:"sessions_before_long_break,omitempty"`
+	Duration                int    `json:"duration,omitempty"`
+	IsFollowed              bool   `json:"is_followed,omitempty"`
+	IsLongBreak             bool   `json:"is_long_break,omitempty"`
+	ShouldTakeLongBreak     bool   `json:"should_take_long_break,omitempty"`
+	SessionsCompleted       int    `json:"sessions_completed,omitempty"`
 }
 
 // CreateRoomRequest is the request for creating a room
@@ -115,19 +115,19 @@ type UpgradeRequest struct {
 
 // StartPomodoroRequest is the request for starting a pomodoro
 type StartPomodoroRequest struct {
-	RoomName                  string `json:"room_name"`
-	ProjectID                 string `json:"project_id,omitempty"`
-	TaskID                    string `json:"task_id,omitempty"`
-	PlannedDuration           int    `json:"planned_duration"`
-	RestDuration              int    `json:"rest_duration"`
-	LongBreakDuration         int    `json:"long_break_duration"`
-	SessionsBeforeLongBreak   int    `json:"sessions_before_long_break"`
+	RoomName                string `json:"room_name"`
+	ProjectID               string `json:"project_id,omitempty"`
+	TaskID                  string `json:"task_id,omitempty"`
+	PlannedDuration         int    `json:"planned_duration"`
+	RestDuration            int    `json:"rest_duration"`
+	LongBreakDuration       int    `json:"long_break_duration"`
+	SessionsBeforeLongBreak int    `json:"sessions_before_long_break"`
 }
 
 // FollowPomodoroRequest is the request for following a pomodoro
 type FollowPomodoroRequest struct {
-	RoomName  string `json:"room_name"`
-	LeaderID  string `json:"leader_id"`
+	RoomName string `json:"room_name"`
+	LeaderID string `json:"leader_id"`
 }
 
 // FollowRoomRequest is the request for unfollow/cancel operations
@@ -144,8 +144,8 @@ type EndPomodoroRequest struct {
 // UpdateStatusRequest is the request for updating user status
 type UpdateStatusRequest struct {
 	RoomName string `json:"room_name"`
-	Emoji   string `json:"emoji"`
-	Message string `json:"message"`
+	Emoji    string `json:"emoji"`
+	Message  string `json:"message"`
 }
 
 // UpdateRoomSettingsRequest is the request for updating room settings
@@ -172,17 +172,17 @@ type UpdateProjectRequest struct {
 
 // CreateTaskRequest is the request for creating a task
 type CreateTaskRequest struct {
-	RoomName   string `json:"room_name"`
-	ClientID   string `json:"client_id"`
-	Title      string `json:"title"`
-	ProjectID  string `json:"project_id,omitempty"`
+	RoomName  string `json:"room_name"`
+	ClientID  string `json:"client_id"`
+	Title     string `json:"title"`
+	ProjectID string `json:"project_id,omitempty"`
 }
 
 // UpdateTaskRequest is the request for updating a task
 type UpdateTaskRequest struct {
-	Title      string `json:"title,omitempty"`
-	Status     string `json:"status,omitempty"`
-	ProjectID  string `json:"project_id,omitempty"`
+	Title     string `json:"title,omitempty"`
+	Status    string `json:"status,omitempty"`
+	ProjectID string `json:"project_id,omitempty"`
 }
 
 // CreateAnnouncementRequest is the request for creating an announcement
@@ -193,22 +193,22 @@ type CreateAnnouncementRequest struct {
 
 // SyncTasksRequest is the request for syncing tasks
 type SyncTasksRequest struct {
-	RoomName string       `json:"room_name"`
+	RoomName string         `json:"room_name"`
 	Tasks    []SyncTaskItem `json:"tasks"`
 }
 
 // SyncTaskItem represents a task item for syncing
 type SyncTaskItem struct {
-	ClientID   string `json:"client_id"`
-	Title      string `json:"title"`
-	Status     string `json:"status"`
-	ProjectID  string `json:"project_id,omitempty"`
-	CreatedAt  string `json:"created_at"`
+	ClientID  string `json:"client_id"`
+	Title     string `json:"title"`
+	Status    string `json:"status"`
+	ProjectID string `json:"project_id,omitempty"`
+	CreatedAt string `json:"created_at"`
 }
 
 // SyncTasksResponse is the response for syncing tasks
 type SyncTasksResponse struct {
-	Synced int             `json:"synced"`
+	Synced int              `json:"synced"`
 	Tasks  []SyncTaskResult `json:"tasks"`
 }
 
@@ -220,24 +220,24 @@ type SyncTaskResult struct {
 
 // StatsResponse is the response for stats
 type StatsResponse struct {
-	Period          string       `json:"period"`
-	TotalPomodoros  int          `json:"total_pomodoros"`
-	TotalDuration   int          `json:"total_duration"`
-	ByProject       []ProjectStat `json:"by_project,omitempty"`
-	ByDay           []DayStat    `json:"by_day,omitempty"`
+	Period         string        `json:"period"`
+	TotalPomodoros int           `json:"total_pomodoros"`
+	TotalDuration  int           `json:"total_duration"`
+	ByProject      []ProjectStat `json:"by_project,omitempty"`
+	ByDay          []DayStat     `json:"by_day,omitempty"`
 }
 
 // ProjectStat represents stats by project
 type ProjectStat struct {
-	ProjectID       string `json:"project_id"`
-	ProjectName     string `json:"project_name"`
-	PomodoroCount   int    `json:"pomodoro_count"`
-	TotalDuration   int    `json:"total_duration"`
+	ProjectID     string `json:"project_id"`
+	ProjectName   string `json:"project_name"`
+	PomodoroCount int    `json:"pomodoro_count"`
+	TotalDuration int    `json:"total_duration"`
 }
 
 // DayStat represents stats by day
 type DayStat struct {
-	Date            string `json:"date"`
-	PomodoroCount   int    `json:"pomodoro_count"`
-	TotalDuration   int    `json:"total_duration"`
+	Date          string `json:"date"`
+	PomodoroCount int    `json:"pomodoro_count"`
+	TotalDuration int    `json:"total_duration"`
 }

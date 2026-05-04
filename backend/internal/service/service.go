@@ -16,25 +16,25 @@ import (
 )
 
 var (
-	ErrRoomNotFound        = errors.New("room_not_found")
-	ErrMemberNotFound     = errors.New("member_not_found")
-	ErrInvalidPassword    = errors.New("invalid_password")
-	ErrInvalidRoomPassword = errors.New("invalid_room_password")
+	ErrRoomNotFound         = errors.New("room_not_found")
+	ErrMemberNotFound       = errors.New("member_not_found")
+	ErrInvalidPassword      = errors.New("invalid_password")
+	ErrInvalidRoomPassword  = errors.New("invalid_room_password")
 	ErrRoomRequiresPassword = errors.New("room_requires_password")
-	ErrRoomIsReadonly     = errors.New("room_is_readonly")
-	ErrUsernameTaken     = errors.New("username_taken")
-	ErrRoomNameTaken     = errors.New("room_name_taken")
-	ErrNoActiveSession    = errors.New("no_active_session")
-	ErrAlreadyFollowing   = errors.New("already_following")
-	ErrNotFollowing       = errors.New("not_following")
-	ErrNotRoomOwner       = errors.New("not_room_owner")
-	ErrSessionNotActive   = errors.New("session_not_active")
-	ErrTokenExpired       = errors.New("token_expired")
-	ErrTokenInvalid       = errors.New("token_invalid")
-	ErrMustBePersistent   = errors.New("must_be_persistent_user")
-	ErrMustBeOwner        = errors.New("must_be_owner")
-	ErrProjectNotFound    = errors.New("project_not_found")
-	ErrTaskNotFound       = errors.New("task_not_found")
+	ErrRoomIsReadonly       = errors.New("room_is_readonly")
+	ErrUsernameTaken        = errors.New("username_taken")
+	ErrRoomNameTaken        = errors.New("room_name_taken")
+	ErrNoActiveSession      = errors.New("no_active_session")
+	ErrAlreadyFollowing     = errors.New("already_following")
+	ErrNotFollowing         = errors.New("not_following")
+	ErrNotRoomOwner         = errors.New("not_room_owner")
+	ErrSessionNotActive     = errors.New("session_not_active")
+	ErrTokenExpired         = errors.New("token_expired")
+	ErrTokenInvalid         = errors.New("token_invalid")
+	ErrMustBePersistent     = errors.New("must_be_persistent_user")
+	ErrMustBeOwner          = errors.New("must_be_owner")
+	ErrProjectNotFound      = errors.New("project_not_found")
+	ErrTaskNotFound         = errors.New("task_not_found")
 )
 
 type Service struct {
@@ -696,13 +696,13 @@ func (s *Service) StartPomodoro(tokenValue string, req *models.StartPomodoroRequ
 
 	// Count today's sessions
 	return &models.PomodoroStatusResponse{
-		Phase:     "focusing",
-		SessionID:         session.ID,
-		StartedAt:         session.StartedAt.Format(time.RFC3339),
-		RemainingSeconds:  plannedDuration,
-		PlannedDuration:   plannedDuration,
-		RestDuration:      restDuration,
-		LongBreakDuration: longBreakDuration,
+		Phase:                   "focusing",
+		SessionID:               session.ID,
+		StartedAt:               session.StartedAt.Format(time.RFC3339),
+		RemainingSeconds:        plannedDuration,
+		PlannedDuration:         plannedDuration,
+		RestDuration:            restDuration,
+		LongBreakDuration:       longBreakDuration,
 		SessionsBeforeLongBreak: sessionsBeforeLongBreak,
 	}, nil
 }
@@ -757,12 +757,12 @@ func (s *Service) FollowPomodoro(tokenValue string, req *models.FollowPomodoroRe
 
 	return &models.PomodoroStatusResponse{
 		Phase:            "following",
-		SessionID:         session.ID,
-		StartedAt:         leaderSession.StartedAt.Format(time.RFC3339),
-		RemainingSeconds:  remaining,
-		LeaderID:          req.LeaderID,
-		LeaderUsername:    leader.Username,
-		PlannedDuration:   leaderSession.PlannedDuration,
+		SessionID:        session.ID,
+		StartedAt:        leaderSession.StartedAt.Format(time.RFC3339),
+		RemainingSeconds: remaining,
+		LeaderID:         req.LeaderID,
+		LeaderUsername:   leader.Username,
+		PlannedDuration:  leaderSession.PlannedDuration,
 	}, nil
 }
 
@@ -857,16 +857,16 @@ func (s *Service) EndPomodoro(tokenValue string, req *models.EndPomodoroRequest)
 	go s.broadcastPomodoroEnded(token.RoomID, token.MemberID, session.ID, duration, "rest")
 
 	return &models.PomodoroStatusResponse{
-		Phase:              "rest",
-		SessionID:          session.ID,
-		RemainingSeconds:   actualRest,
-		Duration:           duration,
-		PlannedDuration:    session.PlannedDuration,
-		RestDuration:       actualRest,
-		LongBreakDuration:  longBreakDuration,
-		IsLongBreak:        shouldTakeLongBreak,
+		Phase:               "rest",
+		SessionID:           session.ID,
+		RemainingSeconds:    actualRest,
+		Duration:            duration,
+		PlannedDuration:     session.PlannedDuration,
+		RestDuration:        actualRest,
+		LongBreakDuration:   longBreakDuration,
+		IsLongBreak:         shouldTakeLongBreak,
 		ShouldTakeLongBreak: shouldTakeLongBreak,
-		SessionsCompleted:  sessionsCompleted + 1,
+		SessionsCompleted:   sessionsCompleted + 1,
 	}, nil
 }
 
@@ -1263,7 +1263,7 @@ func (s *Service) broadcastPomodoroStarted(roomID, memberID, sessionID string, s
 		"user_id":    memberID,
 		"username":   member.Username,
 		"session_id": sessionID,
-		"started_at":  startedAt.Format(time.RFC3339),
+		"started_at": startedAt.Format(time.RFC3339),
 	})
 
 	log.Printf("Broadcast pomodoro_started: room=%s, user=%s", room.Name, member.Username)
@@ -1390,8 +1390,8 @@ func (s *Service) broadcastUserJoined(roomID, memberID string) {
 
 	hub.BroadcastEvent(room.Name, "user_joined", map[string]interface{}{
 		"user": map[string]interface{}{
-			"id":       member.ID,
-			"username": member.Username,
+			"id":        member.ID,
+			"username":  member.Username,
 			"is_online": true,
 		},
 	})

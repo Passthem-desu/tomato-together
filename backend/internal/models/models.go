@@ -59,23 +59,23 @@ type Task struct {
 
 // PomodoroSession represents a pomodoro session (also acts as state machine)
 type PomodoroSession struct {
-	ID              string     `json:"id"`
-	MemberID        string     `json:"member_id"`
-	RoomID          string     `json:"room_id"`
-	ProjectID       string     `json:"project_id"`
-	TaskID          string     `json:"task_id"`
-	Duration        int        `json:"duration"`
-	PlannedDuration int        `json:"planned_duration"`
-	IsFollowed      bool       `json:"is_followed"`
-	LeaderID        string     `json:"leader_id"`
-	StartedAt       time.Time  `json:"started_at"`
-	EndedAt         *time.Time `json:"ended_at"`
-	PausedAt                  *time.Time `json:"paused_at,omitempty"`
-	RestDuration              int        `json:"rest_duration"`
-	IsLongBreak               bool       `json:"is_long_break"`
-	PlannedRestDuration       int        `json:"-"`
-	PlannedLongBreakDuration  int        `json:"-"`
-	SessionsBeforeLongBreak   int        `json:"-"`
+	ID                       string     `json:"id"`
+	MemberID                 string     `json:"member_id"`
+	RoomID                   string     `json:"room_id"`
+	ProjectID                string     `json:"project_id"`
+	TaskID                   string     `json:"task_id"`
+	Duration                 int        `json:"duration"`
+	PlannedDuration          int        `json:"planned_duration"`
+	IsFollowed               bool       `json:"is_followed"`
+	LeaderID                 string     `json:"leader_id"`
+	StartedAt                time.Time  `json:"started_at"`
+	EndedAt                  *time.Time `json:"ended_at"`
+	PausedAt                 *time.Time `json:"paused_at,omitempty"`
+	RestDuration             int        `json:"rest_duration"`
+	IsLongBreak              bool       `json:"is_long_break"`
+	PlannedRestDuration      int        `json:"-"`
+	PlannedLongBreakDuration int        `json:"-"`
+	SessionsBeforeLongBreak  int        `json:"-"`
 }
 
 // UserStatus represents a user's status
