@@ -1167,44 +1167,44 @@ POST /api/tasks/sync
 
 ## 10. 统计接口
 
-### 10.1 获取个人统计（L2 持久化用户）
+### 10.1 获取个人统计
 
 ```
-GET /api/stats
+GET /api/stats/me
 ```
 
-**需要认证**: L2（持久化用户）
-
-**查询参数**:
-- `room_name`: 房间名（可选，用于筛选特定房间的统计）
-- `period`: 统计周期（`week` / `month` / `all`）
+**需要认证**: L2
 
 **响应** (200):
 ```json
 {
   "success": true,
   "data": {
-    "period": "week",
     "total_pomodoros": 42,
-    "total_duration": 63000,
-    "by_tag": [
-      {
-        "tag_id": "uuid-xxx",
-        "tag_name": "工作",
-        "pomodoro_count": 25,
-        "total_duration": 37500
-      }
-    ],
-    "by_day": [
-      {
-        "date": "2026-05-04",
-        "pomodoro_count": 8,
-        "total_duration": 12000
-      }
-    ]
+    "total_duration": 63000
   }
 }
 ```
+
+### 10.2 重置个人统计
+
+```
+DELETE /api/stats/me
+```
+
+**需要认证**: L2
+
+**响应** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "message": "统计数据已重置"
+  }
+}
+```
+
+> 注意：用户列表中每个人的 `total_pomodoros` 和 `total_duration` 字段由 `GET /api/rooms/:name/users` 返回，无需单独调用。
 
 ---
 
@@ -1473,7 +1473,8 @@ GET /api/rooms/:name/sse
 | `/api/tasks/:id` | DELETE | L2（持久化） |
 | `/api/tasks/sync` | POST | L2（持久化） |
 | **统计** |
-| `/api/stats` | GET | L2（持久化，Phase 4 待实现） |
+| `/api/stats/me` | GET | L2 |
+| `/api/stats/me` | DELETE | L2 |
 
 ---
 
