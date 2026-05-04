@@ -1,0 +1,49 @@
+# Node
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+
+# Go
+backend/bin/
+backend/data/
+backend/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docs (not needed at runtime)
+docs/
+logs/
+
+# README, TODO, AGENTS
+README.md
+TODO.md
+AGENTS.md
+LICENSE
+.editorconfig
+.prettierrc
+.prettierignore
+
+# CI
+.github/

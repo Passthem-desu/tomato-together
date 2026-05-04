@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
@@ -55,6 +57,13 @@ func main() {
 	apiRouter := r.PathPrefix("/api").Subrouter()
 	handler.RegisterRoutes(apiRouter)
 
+	// Serve static frontend files (with SPA fallback)
+	staticDir := os.Getenv("STATIC_DIR")
+	if staticDir == "" {
+		staticDir = "./static"
+	}
+	r.PathPrefix("/").Handler(spaFileServer(staticDir))
+
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -77,6 +86,29 @@ func main() {
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal("Server error:", err)
 	}
+}
+
+// spaFileServer returns an http.Handler that serves static files with SPA fallback.
+// If the requested file doesn't exist, it serves index.html instead.
+func spaFileServer(dir string) http.Handler {
+	fs := http.FileServer(http.Dir(dir))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Don't intercept API calls
+		if strings.HasPrefix(r.URL.Path, "/api") {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Try to serve the requested file
+		path := filepath.Join(dir, filepath.Clean(r.URL.Path))
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			// File not found, serve index.html for SPA routing
+			r.URL.Path = "/"
+		}
+
+		fs.ServeHTTP(w, r)
+	})
 }
 
 func runMigrations(db *sql.DB) error {
