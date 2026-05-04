@@ -106,13 +106,16 @@
 - [x] **Improve #3: 休息结束通知** - 补充 `handleSkip` 中缺失的通知；新增通知开关设置
 
 ### 待修复
-- [ ] **Bug #16: 浏览器通知开关未持久化** - 通知选项（`notifications_enabled`）仅在内存中，刷新页面后丢失设置
-- [ ] **Bug #17: 自带通知音缺少多语言翻译** - 音效名称（如 "focus_start"、"focus_end" 等）在设置面板中直接显示 key，未根据当前语言翻译
+- [x] **Bug #16: 浏览器通知开关未持久化** — 改为显式 `onchange` + `saveNotifyPref`，默认 `false`
+- [x] **Bug #17: 自带通知音缺少多语言翻译** — 添加 7 个 sound_* i18n key（zh-hans/zh-hant/en/ja），$derived 中预计算翻译标签
+- [x] **Bug #18: 通知默认行为优化** — 默认关闭通知，仅用户主动勾选时才请求浏览器权限
+- [x] **Bug #19: 长休息时机错误** — 改为前端传 `sessionIndex`（per-batch）给后端，不再依赖数据库当天累计计数，避免旧数据干扰
+- [x] **Bug #20: idle 时倒计时残留** — 新增 `$effect` 强制 idle 时 `displayTime = plannedMinutes * 60`，消除休息结束后的残留秒数
 
 ### 待改进
-- [x] **Align #1: 文档与代码库对齐** - PRD.md、API.md 与实际实现之间可能存在偏差，需要逐接口、逐模型核对并更新文档
-- [ ] **Refactor #1: 房间页面解耦** - `+page.svelte` 目前已超过 500 行，包含计时器、设置、音效、通知、用户列表等混杂逻辑，考虑拆分为独立组件
-- [x] **Refactor #2: i18n 文件整理** - `index.ts` 中存在 zh-hant 段落混入日语、重复 key 等问题，已重新梳理各语言段落
+- [x] **Align #1: 文档与代码库对齐** — CreateRoom password 必填/L1、新增 check-user、phase 替换 is_active、pause/resume/skip-rest 无请求体、stats 标记 Phase 4、补充错误码
+- [x] **Refactor #1: 房间页面解耦** — 拆分为 RoomHeader / TimerCard / SettingsPanel / UserList 四个组件（~/500行 → ~250行 + 4组件）
+- [x] **Refactor #2: i18n 文件整理** — zh-hant 混入日语、zh-hans 混入 zh-hant 均已修复，四语言 116 key 全对齐
 
 ---
 
@@ -221,5 +224,5 @@ announcements (id, room_id, sender_id, title, body, created_at)
 ---
 
 *创建时间：2026-05-04*
-*最后更新：2026-05-04（代码规范配置完成 / i18n 整理完成 / 新增 Bug #16 #17）*
+*最后更新：2026-05-04（修复长休息计次 / idle 倒计时 / 通知持久化+默认关闭 / 移除 header 番茄 emoji）*
 *历史版本：v1.0（全局用户系统，已废弃）*

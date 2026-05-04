@@ -30,7 +30,7 @@
      ============================================ */
 	--color-brand: light-dark(oklch(50% 0.2 190), oklch(75% 0.2 190));
 	--color-brand-hover: light-dark(oklch(45% 0.22 190), oklch(70% 0.22 190));
-	--color-brand-subtle: light-dark(oklch(80% 0.06 190), oklch(30% 0.15 190));
+	--color-brand-subtle: light-dark(oklch(90% 0.03 190), oklch(30% 0.15 190));
 
 	/* ============================================
      Semantic Colors

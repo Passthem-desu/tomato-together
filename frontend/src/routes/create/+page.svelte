@@ -2,8 +2,9 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { currentMember, createRoom, isLoading, error } from '$lib/store';
-	import { getMember, isAuthenticated } from '$lib/api';
+	import { api, getMember, isAuthenticated } from '$lib/api';
 	import { locale, t, getErrorMessage } from '$lib/i18n';
+	import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
 
 	let step = $state(1);
 	let roomName = $state('');
@@ -36,7 +37,24 @@
 
 	function handleStep1() {
 		if (!roomName.trim()) return;
-		step = 2;
+
+		isLoading.set(true);
+		error.set(null);
+
+		api.getRoomInfo(roomName)
+			.then(() => {
+				// Room exists — name taken
+				error.set(t('error_room_name_taken', $locale));
+			})
+			.catch((e) => {
+				// 404 means available
+				if (e?.message === 'room_not_found') {
+					step = 2;
+				} else {
+					error.set(getErrorMessage(e, $locale));
+				}
+			})
+			.finally(() => isLoading.set(false));
 	}
 
 	function handleStep2() {
@@ -161,7 +179,7 @@
 						<span class="spinner"></span>
 						{t('loading', $locale)}
 					{:else}
-						🍅 {t('create_room', $locale)}
+						{t('create_room', $locale)}
 					{/if}
 				</button>
 			</form>
@@ -175,6 +193,8 @@
 			{t('cancel', $locale)}
 		</button>
 	</div>
+
+	<LocaleSwitcher fixed />
 </main>
 
 <style>
@@ -249,6 +269,12 @@
 		gap: 1rem;
 	}
 
+	.form-card form {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
 	.optional {
 		color: var(--color-fg-muted);
 		font-weight: 400;
@@ -273,6 +299,10 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	.form-card button[type='submit'] {
+		margin-top: 0.5rem;
 	}
 
 	@media (max-width: 640px) {

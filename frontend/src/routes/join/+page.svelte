@@ -5,6 +5,7 @@
 	import { currentMember, joinRoom, isLoading, error } from '$lib/store';
 	import { getMember, isAuthenticated, api } from '$lib/api';
 	import { locale, t, getErrorMessage } from '$lib/i18n';
+	import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
 
 	let step = $state('room');
 	let roomName = $state('');
@@ -69,7 +70,22 @@
 
 	async function handleRoomPasswordSubmit() {
 		if (!roomPassword.trim()) return;
-		step = 'username';
+
+		isLoading.set(true);
+		error.set(null);
+
+		try {
+			const result = await api.checkRoomPassword(roomName, roomPassword);
+			if (result.success && result.data?.valid) {
+				step = 'username';
+			} else {
+				error.set(t('error_invalid_room_password', $locale));
+			}
+		} catch (e: any) {
+			error.set(getErrorMessage(e, $locale));
+		} finally {
+			isLoading.set(false);
+		}
 	}
 
 	async function handleUsernameSubmit() {
@@ -255,6 +271,10 @@
 					/>
 				</div>
 
+				{#if $error}
+					<p class="form-error">{$error}</p>
+				{/if}
+
 				<button class="btn-primary btn-full" type="submit" disabled={$isLoading}>
 					{t('next', $locale)} →
 				</button>
@@ -302,7 +322,6 @@
 				}}
 			>
 				<div class="user-info">
-					<span class="user-avatar">👤</span>
 					<span class="user-name">{username}</span>
 				</div>
 
@@ -361,7 +380,7 @@
 						{#if $isLoading}
 							<span class="spinner"></span>
 						{:else}
-							🍅 {t('join_room', $locale)}
+							{t('join_room', $locale)}
 						{/if}
 					</button>
 				{:else}
@@ -378,11 +397,13 @@
 		{/if}
 
 		{#if step !== 'room'}
-			<button class="btn-text" onclick={goBack}>
+			<button class="btn-text back-link" onclick={goBack}>
 				← {t('back', $locale)}
 			</button>
 		{/if}
 	</div>
+
+	<LocaleSwitcher fixed />
 </main>
 
 <style>
@@ -425,6 +446,12 @@
 	.form-card {
 		width: 100%;
 		max-width: 400px;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.form-card form {
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;

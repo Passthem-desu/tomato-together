@@ -122,6 +122,7 @@ type StartPomodoroRequest struct {
 	RestDuration            int    `json:"rest_duration"`
 	LongBreakDuration       int    `json:"long_break_duration"`
 	SessionsBeforeLongBreak int    `json:"sessions_before_long_break"`
+	SessionIndex            int    `json:"session_index,omitempty"` // 1-based batch position
 }
 
 // FollowPomodoroRequest is the request for following a pomodoro
@@ -137,8 +138,9 @@ type FollowRoomRequest struct {
 
 // EndPomodoroRequest is the request for ending a pomodoro
 type EndPomodoroRequest struct {
-	RoomName string `json:"room_name"`
-	Aborted  bool   `json:"aborted"`
+	RoomName     string `json:"room_name"`
+	Aborted      bool   `json:"aborted"`
+	SessionIndex int    `json:"session_index,omitempty"` // 1-based batch position, used for long-break calc
 }
 
 // UpdateStatusRequest is the request for updating user status

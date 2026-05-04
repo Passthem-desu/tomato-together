@@ -84,8 +84,9 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
 	const data = await response.json();
 
 	if (!response.ok) {
-		// Auth errors → force logout
-		if (response.status === 401) {
+		// Auth errors → force logout only if we had a token (session expired)
+		// For join/login flows, 401 is an expected error (wrong password etc.)
+		if (response.status === 401 && token) {
 			localStorage.removeItem('token');
 			localStorage.removeItem('room_name');
 			localStorage.removeItem('member');
@@ -145,6 +146,17 @@ export const api = {
 		});
 	},
 
+	// Check room password validity
+	checkRoomPassword: async (
+		roomName: string,
+		roomPassword: string
+	): Promise<{ success: boolean; data: { valid: boolean } }> => {
+		return apiRequest(`/rooms/${encodeURIComponent(roomName)}/check-password`, {
+			method: 'POST',
+			body: JSON.stringify({ room_password: roomPassword }),
+		});
+	},
+
 	// Leave room
 	leaveRoom: async (): Promise<{ success: boolean }> => {
 		const roomName = localStorage.getItem('room_name');
@@ -185,6 +197,7 @@ export const api = {
 		rest_duration?: number;
 		long_break_duration?: number;
 		sessions_before_long_break?: number;
+		session_index?: number;
 	}): Promise<{ success: boolean; data: PomodoroStatus }> => {
 		return apiRequest('/pomodoro/start', {
 			method: 'POST',
@@ -211,11 +224,12 @@ export const api = {
 
 	endPomodoro: async (
 		roomName: string,
-		aborted = false
+		aborted = false,
+		sessionIndex = 0
 	): Promise<{ success: boolean; data: PomodoroStatus }> => {
 		return apiRequest('/pomodoro/end', {
 			method: 'POST',
-			body: JSON.stringify({ room_name: roomName, aborted }),
+			body: JSON.stringify({ room_name: roomName, aborted, session_index: sessionIndex }),
 		});
 	},
 

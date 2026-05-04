@@ -502,6 +502,17 @@ func (s *Service) CheckUsername(roomName, username string) (*models.UserCheckRes
 	}, nil
 }
 
+func (s *Service) CheckRoomPassword(roomName, password string) (bool, error) {
+	room, err := s.repo.GetRoomByName(roomName)
+	if err != nil {
+		return false, ErrRoomNotFound
+	}
+	if room.PasswordHash == "" {
+		return true, nil // No password set
+	}
+	return checkPassword(password, room.PasswordHash), nil
+}
+
 func (s *Service) UpdateRoomSettings(tokenValue string, req *models.UpdateRoomSettingsRequest) error {
 	token, err := s.ValidateToken(tokenValue)
 	if err != nil {
@@ -684,6 +695,7 @@ func (s *Service) StartPomodoro(tokenValue string, req *models.StartPomodoroRequ
 		PlannedRestDuration:      restDuration,
 		PlannedLongBreakDuration: longBreakDuration,
 		SessionsBeforeLongBreak:  sessionsBeforeLongBreak,
+		SessionIndex:             req.SessionIndex,
 		IsFollowed:               false,
 		StartedAt:                time.Now(),
 	}
@@ -807,9 +819,13 @@ func (s *Service) EndPomodoro(tokenValue string, req *models.EndPomodoroRequest)
 		return nil, ErrNoActiveSession
 	}
 
-	// Count today's sessions (before ending this one)
-	sessions, _ := s.repo.GetTodaySessionsByMemberID(token.MemberID, time.Now())
-	sessionsCompleted := len(sessions)
+	// Use session's stored SessionIndex (set at creation time, immutable)
+	sessionsCompleted := session.SessionIndex
+	if sessionsCompleted <= 0 {
+		// Fallback for old sessions without session_index
+		sessions, _ := s.repo.GetTodaySessionsByMemberID(token.MemberID, time.Now())
+		sessionsCompleted = len(sessions) + 1
+	}
 
 	// Determine rest duration from session's stored settings
 	restDuration := session.PlannedRestDuration
@@ -841,7 +857,7 @@ func (s *Service) EndPomodoro(tokenValue string, req *models.EndPomodoroRequest)
 			SessionID:         session.ID,
 			Duration:          duration,
 			PlannedDuration:   session.PlannedDuration,
-			SessionsCompleted: sessionsCompleted + 1,
+			SessionsCompleted: sessionsCompleted,
 		}, nil
 	}
 
@@ -866,7 +882,7 @@ func (s *Service) EndPomodoro(tokenValue string, req *models.EndPomodoroRequest)
 		LongBreakDuration:   longBreakDuration,
 		IsLongBreak:         shouldTakeLongBreak,
 		ShouldTakeLongBreak: shouldTakeLongBreak,
-		SessionsCompleted:   sessionsCompleted + 1,
+		SessionsCompleted:   sessionsCompleted,
 	}, nil
 }
 

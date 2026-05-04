@@ -37,6 +37,7 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/rooms/{name}/join", h.JoinRoom).Methods(http.MethodPost)
 	r.HandleFunc("/rooms/{name}/stats", h.GetRoomStats).Methods(http.MethodGet)
 	r.HandleFunc("/rooms/{name}/check-user", h.CheckUser).Methods(http.MethodPost)
+	r.HandleFunc("/rooms/{name}/check-password", h.CheckRoomPassword).Methods(http.MethodPost)
 	r.HandleFunc("/auth/login", h.Login).Methods(http.MethodPost)
 
 	// L2 Routes (require token)
@@ -283,6 +284,30 @@ func (h *Handler) CheckUser(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data":    userStatus,
+	})
+}
+
+func (h *Handler) CheckRoomPassword(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	roomName := vars["name"]
+
+	var req struct {
+		RoomPassword string `json:"room_password"`
+	}
+	if err := h.parseJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	valid, err := h.svc.CheckRoomPassword(roomName, req.RoomPassword)
+	if err != nil {
+		h.writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    map[string]interface{}{"valid": valid},
 	})
 }
 

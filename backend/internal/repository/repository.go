@@ -346,13 +346,13 @@ func (r *Repository) scanTasks(query string, args ...interface{}) ([]*models.Tas
 // PomodoroSession operations
 
 func (r *Repository) CreatePomodoroSession(session *models.PomodoroSession) error {
-	query := `INSERT INTO pomodoro_sessions (id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err := r.db.Exec(query, session.ID, session.MemberID, session.RoomID, session.ProjectID, session.TaskID, session.Duration, session.PlannedDuration, boolToInt(session.IsFollowed), session.LeaderID, session.StartedAt, session.EndedAt, session.PausedAt, session.RestDuration, boolToInt(session.IsLongBreak), session.PlannedRestDuration, session.PlannedLongBreakDuration, session.SessionsBeforeLongBreak)
+	query := `INSERT INTO pomodoro_sessions (id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := r.db.Exec(query, session.ID, session.MemberID, session.RoomID, session.ProjectID, session.TaskID, session.Duration, session.PlannedDuration, boolToInt(session.IsFollowed), session.LeaderID, session.StartedAt, session.EndedAt, session.PausedAt, session.RestDuration, boolToInt(session.IsLongBreak), session.PlannedRestDuration, session.PlannedLongBreakDuration, session.SessionsBeforeLongBreak, session.SessionIndex)
 	return err
 }
 
 func (r *Repository) GetActiveSessionByMemberID(memberID string) (*models.PomodoroSession, error) {
-	query := `SELECT id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break FROM pomodoro_sessions WHERE member_id = ? AND ended_at IS NULL`
+	query := `SELECT id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? AND ended_at IS NULL`
 	row := r.db.QueryRow(query, memberID)
 	return r.scanPomodoroSession(row)
 }
@@ -399,7 +399,7 @@ func (r *Repository) ResumeSession(sessionID string, pausedMillis int) error {
 
 // GetLatestSessionByMemberID returns the most recent session (active or completed)
 func (r *Repository) GetLatestSessionByMemberID(memberID string) (*models.PomodoroSession, error) {
-	query := `SELECT id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break FROM pomodoro_sessions WHERE member_id = ? ORDER BY started_at DESC LIMIT 1`
+	query := `SELECT id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? ORDER BY started_at DESC LIMIT 1`
 	row := r.db.QueryRow(query, memberID)
 	return r.scanPomodoroSession(row)
 }
@@ -407,7 +407,7 @@ func (r *Repository) GetLatestSessionByMemberID(memberID string) (*models.Pomodo
 func (r *Repository) GetTodaySessionsByMemberID(memberID string, date time.Time) ([]*models.PomodoroSession, error) {
 	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	endOfDay := startOfDay.Add(24 * time.Hour)
-	query := `SELECT id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break FROM pomodoro_sessions WHERE member_id = ? AND started_at >= ? AND started_at < ?`
+	query := `SELECT id, member_id, room_id, project_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? AND started_at >= ? AND started_at < ? AND ended_at IS NOT NULL`
 	rows, err := r.db.Query(query, memberID, startOfDay, endOfDay)
 	if err != nil {
 		return nil, err
@@ -420,7 +420,7 @@ func (r *Repository) GetTodaySessionsByMemberID(memberID string, date time.Time)
 		var projectID, taskID, leaderID sql.NullString
 		var endedAt, pausedAt sql.NullTime
 		var isFollowed, isLongBreak int
-		err := rows.Scan(&session.ID, &session.MemberID, &session.RoomID, &projectID, &taskID, &session.Duration, &session.PlannedDuration, &isFollowed, &leaderID, &session.StartedAt, &endedAt, &pausedAt, &session.RestDuration, &isLongBreak, &session.PlannedRestDuration, &session.PlannedLongBreakDuration, &session.SessionsBeforeLongBreak)
+		err := rows.Scan(&session.ID, &session.MemberID, &session.RoomID, &projectID, &taskID, &session.Duration, &session.PlannedDuration, &isFollowed, &leaderID, &session.StartedAt, &endedAt, &pausedAt, &session.RestDuration, &isLongBreak, &session.PlannedRestDuration, &session.PlannedLongBreakDuration, &session.SessionsBeforeLongBreak, &session.SessionIndex)
 		if err != nil {
 			return nil, err
 		}
@@ -451,7 +451,7 @@ func (r *Repository) scanPomodoroSession(row *sql.Row) (*models.PomodoroSession,
 	var projectID, taskID, leaderID sql.NullString
 	var endedAt, pausedAt sql.NullTime
 	var isFollowed, isLongBreak int
-	err := row.Scan(&session.ID, &session.MemberID, &session.RoomID, &projectID, &taskID, &session.Duration, &session.PlannedDuration, &isFollowed, &leaderID, &session.StartedAt, &endedAt, &pausedAt, &session.RestDuration, &isLongBreak, &session.PlannedRestDuration, &session.PlannedLongBreakDuration, &session.SessionsBeforeLongBreak)
+	err := row.Scan(&session.ID, &session.MemberID, &session.RoomID, &projectID, &taskID, &session.Duration, &session.PlannedDuration, &isFollowed, &leaderID, &session.StartedAt, &endedAt, &pausedAt, &session.RestDuration, &isLongBreak, &session.PlannedRestDuration, &session.PlannedLongBreakDuration, &session.SessionsBeforeLongBreak, &session.SessionIndex)
 	if err != nil {
 		return nil, err
 	}

@@ -1,5 +1,5 @@
 // Locale configuration
-export type Locale = 'zh-hans' | 'zh-hant' | 'en' | 'ja';
+export type Locale = 'zh-hans' | 'zh-hant' | 'en' | 'ja' | 'ko' | 'vi';
 
 export interface LocaleOption {
 	code: Locale;
@@ -11,6 +11,8 @@ export const locales: LocaleOption[] = [
 	{ code: 'zh-hant', name: '繁體中文' },
 	{ code: 'en', name: 'English' },
 	{ code: 'ja', name: '日本語' },
+	{ code: 'ko', name: '한국어' },
+	{ code: 'vi', name: 'Tiếng Việt' },
 ];
 
 // Get stored locale or default

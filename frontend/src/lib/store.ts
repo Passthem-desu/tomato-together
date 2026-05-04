@@ -320,6 +320,8 @@ export async function startPomodoro(options?: {
 	planned_duration?: number;
 	rest_duration?: number;
 	long_break_duration?: number;
+	sessions_before_long_break?: number;
+	session_index?: number;
 }) {
 	isLoading.set(true);
 	error.set(null);
@@ -388,7 +390,7 @@ export async function unfollowPomodoro() {
 	}
 }
 
-export async function endPomodoro(aborted = false) {
+export async function endPomodoro(aborted = false, sessionIndex = 0) {
 	isLoading.set(true);
 	error.set(null);
 
@@ -396,7 +398,7 @@ export async function endPomodoro(aborted = false) {
 		const roomName = get(currentRoom)?.name;
 		if (!roomName) throw new Error('Not in a room');
 
-		const response = await api.endPomodoro(roomName, aborted);
+		const response = await api.endPomodoro(roomName, aborted, sessionIndex);
 		pomodoroStatus.set(response.data);
 
 		return true;

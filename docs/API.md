@@ -117,7 +117,7 @@ POST /api/rooms
   "room_name": "学习小组",
   "room_password": "房间访问密码（可选）",
   "username": "小明",
-  "password": "用户密码（可选，不设置则为匿名用户）",
+  "password": "用户密码（必填，房主必须是持久化用户）",
   "is_readonly": false
 }
 ```
@@ -139,19 +139,17 @@ POST /api/rooms
       "is_owner": true,
       "is_persistent": true
     },
-    "token": "550e8400-e29b-41d4-a716-446655440000",
-    "created_at": "2026-05-04T10:00:00Z"
+    "token": "550e8400-e29b-41d4-a716-446655440000"
   }
 }
 ```
 
 **说明**：
 - `username`: 房主用户名（同一房间内唯一）
-- `password`: 用户密码（可选）
-  - 不设置：创建匿名用户（房主仍可操作，但匿名用户无法成为其他房间的房主）
-  - 设置：创建持久化用户，可开启云同步
+- `password`: 用户密码（**必填**，房主必须是持久化用户）
 - 创建者自动成为房主（`is_owner=true`）
 - 返回的 `token` 用于后续 L2 操作
+- 此接口为 L1（无需预先认证），通过 `password` 字段保证创建者是持久化用户
 
 ### 3.2 加入房间
 
@@ -264,7 +262,7 @@ GET /api/rooms/:name/users
           "message": "写代码中"
         },
         "pomodoro": {
-          "is_active": true,
+          "phase": "focusing",
           "is_following": false,
           "leader_username": null,
           "started_at": "2026-05-04T10:30:00Z",
@@ -350,6 +348,36 @@ GET /api/rooms/:name/stats
   }
 }
 ```
+
+---
+
+### 3.9 检查用户名
+
+检查指定用户名在房间内是否存在及其类型。
+
+```
+POST /api/rooms/:name/check-user
+```
+
+**请求体**:
+```json
+{
+  "username": "小明"
+}
+```
+
+**响应** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "exists": true,
+    "is_persistent": true
+  }
+}
+```
+
+**说明**：用于加入房间前的用户名可用性检查。
 
 ---
 
@@ -623,12 +651,7 @@ POST /api/pomodoro/pause
 
 **需要认证**: L2
 
-**请求体**:
-```json
-{
-  "room_name": "学习小组"
-}
-```
+**请求体**: 无需请求体（用户身份通过 token 识别）
 
 **响应** (200):
 ```json
@@ -650,12 +673,7 @@ POST /api/pomodoro/resume
 
 **需要认证**: L2
 
-**请求体**:
-```json
-{
-  "room_name": "学习小组"
-}
-```
+**请求体**: 无需请求体（用户身份通过 token 识别）
 
 **响应** (200):
 ```json
@@ -676,12 +694,7 @@ POST /api/pomodoro/skip-rest
 
 **需要认证**: L2
 
-**请求体**:
-```json
-{
-  "room_name": "学习小组"
-}
-```
+**请求体**: 无需请求体（用户身份通过 token 识别）
 
 **响应** (200):
 ```json
@@ -1411,6 +1424,10 @@ GET /api/rooms/:name/sse
 | `token_invalid` | 401 | Token 无效 |
 | `must_be_persistent_user` | 403 | 必须是持久化用户 |
 | `must_be_owner` | 403 | 必须是房主 |
+| `token_missing` | 401 | 未提供 Authorization header |
+| `invalid_request` | 400 | 请求体格式错误 |
+| `password_required` | 400 | 创建房间必须设置用户密码 |
+| `sse_unavailable` | 500 | SSE 服务不可用 |
 
 ---
 
@@ -1419,7 +1436,7 @@ GET /api/rooms/:name/sse
 | 接口 | 方法 | 层级 |
 |------|------|------|
 | **房间** |
-| `/api/rooms` | POST | L2（持久化） |
+| `/api/rooms` | POST | L1（需在 body 中提供 password） |
 | `/api/rooms/:name/join` | POST | L1 |
 | `/api/rooms/:name/leave` | POST | L2 |
 | `/api/rooms/:name` | GET | L1 |
@@ -1427,6 +1444,7 @@ GET /api/rooms/:name/sse
 | `/api/rooms/:name/settings` | PUT | L2（房主） |
 | `/api/rooms/:name/owners/:id` | PUT | L2（房主） |
 | `/api/rooms/:name/stats` | GET | L1 |
+| `/api/rooms/:name/check-user` | POST | L1 |
 | `/api/rooms/:name/announcement` | POST | L2（房主） |
 | `/api/rooms/:name/announcements` | GET | L2 |
 | `/api/rooms/:name/sse` | GET | L1/L2 |
@@ -1458,7 +1476,7 @@ GET /api/rooms/:name/sse
 | `/api/tasks/:id` | DELETE | L2（持久化） |
 | `/api/tasks/sync` | POST | L2（持久化） |
 | **统计** |
-| `/api/stats` | GET | L2（持久化） |
+| `/api/stats` | GET | L2（持久化，Phase 4 待实现） |
 
 ---
 
