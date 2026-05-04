@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { locale, t } from '$lib/i18n';
 	import { api } from '$lib/api';
+	import { refreshRoomUsers } from '$lib/store';
 	import type { UserInfo } from '$lib/api';
 
 	interface Props {
@@ -69,6 +70,7 @@
 		try {
 			const roomName = localStorage.getItem('room_name') || '';
 			await api.deleteStatus(roomName);
+			await refreshRoomUsers();
 		} catch {
 			/* ignore */
 		}
