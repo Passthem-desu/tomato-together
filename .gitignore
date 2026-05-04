@@ -1,0 +1,51 @@
+# ========== 全局 ==========
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
+
+# 后端二进制
+backend/tomatogether
+backend/*.exe
+
+# 前端构建
+frontend/.svelte-kit/
+frontend/build/
+frontend/node_modules/
+
+# 环境变量（敏感）
+.env
+.env.local
+.env.*.local
+
+# 数据文件
+backend/data/
+
+# 压缩包
+*.zip
+*.tar.gz
+*.tar
+
+# 数据库（本地）
+*.db
+*.sqlite
+*.sqlite3
+
+# Coverage
+coverage/
+*.out

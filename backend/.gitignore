@@ -1,0 +1,43 @@
+# Go 二进制
+tomatogether
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试二进制
+*.test
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# 编译输出
+bin/
+dist/
+
+# 依赖（通过 go mod 管理，但 vendoring 时使用）
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 日志
+*.log
+logs/
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 数据目录
+data/
+
+# SQLite 数据库文件
+*.db
+*.sqlite
