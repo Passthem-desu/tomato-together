@@ -37,6 +37,7 @@
 	let sessionIndex = $state(0);
 	let showSettings = $state(false);
 	let notifyEnabled = $state(loadNotifyPref());
+	let soundVersion = $state(0);
 
 	function handleNotifyChange(v: boolean) {
 		notifyEnabled = v;
@@ -44,12 +45,17 @@
 		if (v) requestNotificationPermission();
 	}
 
-	let allSounds = $derived(
-		sound.allSounds().map((s) => ({
+	function handleSoundsChanged() {
+		soundVersion++;
+	}
+
+	let allSounds = $derived.by(() => {
+		void soundVersion;
+		return sound.allSounds().map((s) => ({
 			...s,
 			label: s.source === 'builtin' ? t(`sound_${s.key}`, $locale) : s.label,
-		}))
-	);
+		}));
+	});
 
 	// When idle, force displayTime BEFORE render (prevent tick artifacts)
 	$effect.pre(() => {
@@ -320,6 +326,7 @@
 					ontotalSessionsChange={(v) => (totalSessions = v)}
 					onsessionsBeforeLongChange={(v) => (sessionsBeforeLong = v)}
 					onnotifyEnabledChange={handleNotifyChange}
+					onsoundschanged={handleSoundsChanged}
 				/>
 			{:else}
 				<TimerCard

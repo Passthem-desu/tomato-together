@@ -19,6 +19,7 @@
 		ontotalSessionsChange: (v: number) => void;
 		onsessionsBeforeLongChange: (v: number) => void;
 		onnotifyEnabledChange: (v: boolean) => void;
+		onsoundschanged?: () => void;
 	}
 
 	let {
@@ -38,6 +39,7 @@
 		ontotalSessionsChange,
 		onsessionsBeforeLongChange,
 		onnotifyEnabledChange,
+		onsoundschanged,
 	}: Props = $props();
 
 	const allSoundEvents: SoundEvent[] = [
@@ -72,6 +74,7 @@
 		if (!label) return;
 		if (url) {
 			sound.addUrlSound(label, url);
+			onsoundschanged?.();
 		}
 		newSoundLabel = '';
 		newSoundUrl = '';
@@ -84,6 +87,7 @@
 		const reader = new FileReader();
 		reader.onload = () => {
 			sound.addDataSound(file.name.replace(/\.[^.]+$/, ''), reader.result as string);
+			onsoundschanged?.();
 		};
 		reader.readAsDataURL(file);
 	}
@@ -224,7 +228,10 @@
 							>
 							<button
 								class="btn-text btn-xs"
-								onclick={() => sound.removeSound(s.key)}
+								onclick={() => {
+									sound.removeSound(s.key);
+									onsoundschanged?.();
+								}}
 							>
 								×
 							</button>

@@ -45,7 +45,6 @@ services:
       - PORT=8080
       - JWT_SECRET=change-me-to-a-random-string
       # 可选配置
-      # - SINGLE_ROOM_MODE=false
       # - CORS_ORIGINS=*
       # - JWT_ACCESS_TOKEN_EXPIRY=3600
       # - JWT_REFRESH_TOKEN_EXPIRY=2592000
@@ -70,7 +69,6 @@ docker compose up -d
 | `JWT_SECRET` | (内置默认) | JWT 签名密钥，**生产环境务必修改** |
 | `DB_PATH` | `/app/data/tomatogether.db` | SQLite 数据库路径 |
 | `STATIC_DIR` | `/app/static` | 前端静态文件目录 |
-| `SINGLE_ROOM_MODE` | `false` | 单房间模式 |
 | `CORS_ORIGINS` | `*` | CORS 允许的来源 |
 | `JWT_ACCESS_TOKEN_EXPIRY` | `3600` | Access Token 有效期（秒） |
 | `JWT_REFRESH_TOKEN_EXPIRY` | `2592000` | Refresh Token 有效期（秒） |

@@ -123,22 +123,10 @@ let lastTickData: TickData | null = null;
 
 function handleTick(data: TickData) {
 	lastTickData = data;
-	const users = get(roomUsers);
 	const member = get(currentMember);
 
-	// Update remaining seconds and status from tick
+	// Sync current user's pomodoro status from server (corrects tab-throttling drift)
 	for (const tickUser of data.users) {
-		const existing = users.find((u) => u.id === tickUser.id);
-		if (existing) {
-			// Preserve existing fields (status, is_persistent, etc.) and update pomodoro
-			if (!existing.pomodoro) {
-				existing.pomodoro = { is_active: false, is_following: false };
-			}
-			existing.pomodoro.remaining_seconds = tickUser.remaining_seconds;
-			existing.pomodoro.phase = tickUser.phase || 'idle';
-		}
-
-		// Sync current user's pomodoro status from server (corrects tab-throttling drift)
 		if (member && tickUser.id === member.id) {
 			pomodoroStatus.update((prev) => ({
 				...prev,
@@ -147,7 +135,31 @@ function handleTick(data: TickData) {
 		}
 	}
 
-	roomUsers.set(users);
+	// Create a lookup map for O(1) access
+	const tickMap = new Map(data.users.map((u) => [u.id, u]));
+
+	roomUsers.update((users) => {
+		let changed = false;
+		const updated = users.map((user) => {
+			const tickUser = tickMap.get(user.id);
+			if (!tickUser) return user;
+
+			changed = true;
+			const existingPomodoro = user.pomodoro || {
+				is_active: false,
+				is_following: false,
+			};
+			return {
+				...user,
+				pomodoro: {
+					...existingPomodoro,
+					remaining_seconds: tickUser.remaining_seconds,
+					phase: tickUser.phase || 'idle',
+				},
+			};
+		});
+		return changed ? updated : users;
+	});
 }
 
 /**
@@ -159,26 +171,29 @@ let predictInterval: number | null = null;
 export function startPredictiveCountdown() {
 	if (predictInterval) return;
 	predictInterval = window.setInterval(() => {
-		const users = get(roomUsers);
-		let changed = false;
-		const now = Date.now();
-
-		for (const user of users) {
-			if (
-				user.pomodoro?.phase &&
-				user.pomodoro.phase !== 'idle' &&
-				user.pomodoro.phase !== 'paused' &&
-				user.pomodoro.remaining_seconds !== undefined &&
-				user.pomodoro.remaining_seconds > 0
-			) {
-				user.pomodoro.remaining_seconds = Math.max(0, user.pomodoro.remaining_seconds - 1);
-				changed = true;
-			}
-		}
-
-		if (changed) {
-			roomUsers.set(users);
-		}
+		roomUsers.update((users) => {
+			let changed = false;
+			const updated = users.map((user) => {
+				if (
+					user.pomodoro?.phase &&
+					user.pomodoro.phase !== 'idle' &&
+					user.pomodoro.phase !== 'paused' &&
+					user.pomodoro.remaining_seconds !== undefined &&
+					user.pomodoro.remaining_seconds > 0
+				) {
+					changed = true;
+					return {
+						...user,
+						pomodoro: {
+							...user.pomodoro,
+							remaining_seconds: Math.max(0, user.pomodoro.remaining_seconds - 1),
+						},
+					};
+				}
+				return user;
+			});
+			return changed ? updated : users;
+		});
 	}, 1000);
 }
 
