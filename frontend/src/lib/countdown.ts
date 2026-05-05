@@ -1,6 +1,10 @@
 // Decoupled countdown module — channel-style event emitter.
 // Handles start / pause / resume / stop / setDuration internally.
 // Room page just subscribes to ticks and sends commands.
+//
+// Uses absolute timestamps (endTime) instead of decrementing remaining.
+// This ensures accurate timing even when the page is backgrounded
+// and setInterval is throttled by the browser.
 
 type CountdownState = 'idle' | 'running' | 'paused';
 
@@ -8,12 +12,22 @@ type EventHandler = (...args: any[]) => void;
 
 export class PomodoroCountdown {
 	private remaining = 0;
-	private duration = 0;
 	private state: CountdownState = 'idle';
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private listeners = new Map<string, Set<EventHandler>>();
+	private endTime = 0;
+	private pausedRemaining = 0;
 
-	/** Subscribe to an event. Returns unsubscribe function. */
+	getRemaining(): number {
+		if (this.state === 'paused') return this.pausedRemaining;
+		if (this.state !== 'running' || this.endTime === 0) return this.remaining;
+		return Math.max(0, Math.ceil((this.endTime - Date.now()) / 1000));
+	}
+
+	getState(): CountdownState {
+		return this.state;
+	}
+
 	on(event: string, fn: EventHandler): () => void {
 		if (!this.listeners.has(event)) this.listeners.set(event, new Set());
 		this.listeners.get(event)!.add(fn);
@@ -24,68 +38,58 @@ export class PomodoroCountdown {
 		this.listeners.get(event)?.forEach((fn) => fn(...args));
 	}
 
-	/** Start (or restart) countdown with a new duration in seconds. */
 	start(durationSec: number) {
 		this.stop();
-		this.duration = durationSec;
 		this.remaining = durationSec;
+		this.endTime = Date.now() + durationSec * 1000;
 		this.state = 'running';
-		this.emit('tick', this.remaining);
+		this.emit('tick', this.getRemaining());
 		this.emit('stateChange', this.state);
 		this.startTimer();
 	}
 
-	/** Pause the running countdown. */
 	pause() {
 		if (this.state !== 'running') return;
+		this.pausedRemaining = this.getRemaining();
 		this.state = 'paused';
 		this.stopTimer();
 		this.emit('stateChange', this.state);
 	}
 
-	/** Resume from paused. */
 	resume() {
 		if (this.state !== 'paused') return;
+		this.endTime = Date.now() + this.pausedRemaining * 1000;
 		this.state = 'running';
 		this.emit('stateChange', this.state);
 		this.startTimer();
 	}
 
-	/** Stop completely, reset to idle. */
 	stop() {
 		this.state = 'idle';
-		this.remaining = this.duration;
 		this.stopTimer();
 		this.emit('stateChange', this.state);
 	}
 
-	/** Override remaining seconds (e.g. drift correction from server). */
 	setRemaining(sec: number) {
-		if (sec !== this.remaining) {
-			this.remaining = Math.max(0, sec);
-			this.emit('tick', this.remaining);
+		const newRemaining = Math.max(0, sec);
+		if (newRemaining !== this.getRemaining()) {
+			if (this.state === 'paused') {
+				this.pausedRemaining = newRemaining;
+			} else if (this.state === 'running') {
+				this.endTime = Date.now() + newRemaining * 1000;
+			}
+			this.emit('tick', newRemaining);
 		}
 	}
 
-	/** Get current state. */
-	getState(): CountdownState {
-		return this.state;
-	}
-	getRemaining(): number {
-		return this.remaining;
-	}
-
-	/** Clean up. */
 	destroy() {
 		this.stopTimer();
 		this.listeners.clear();
 	}
 
-	// ── private ──
-
 	private startTimer() {
 		this.stopTimer();
-		this.timer = setInterval(() => this.tick(), 1000);
+		this.timer = setInterval(() => this.tick(), 100);
 	}
 
 	private stopTimer() {
@@ -97,11 +101,10 @@ export class PomodoroCountdown {
 
 	private tick() {
 		if (this.state !== 'running') return;
-		if (this.remaining > 0) {
-			this.remaining = Math.max(0, this.remaining - 1);
-			this.emit('tick', this.remaining);
-		}
-		if (this.remaining <= 0) {
+		const remaining = this.getRemaining();
+		if (remaining > 0) {
+			this.emit('tick', remaining);
+		} else {
 			this.stopTimer();
 			this.state = 'idle';
 			this.emit('complete');
