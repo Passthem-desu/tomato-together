@@ -1,4 +1,4 @@
-const CACHE = 'tomatogether-v1';
+const CACHE = 'tomatogether-v2';
 
 self.addEventListener('install', () => {
 	self.skipWaiting();
@@ -21,7 +21,7 @@ self.addEventListener('fetch', (event) => {
 	event.respondWith(
 		caches.match(event.request).then((cached) => {
 			const fetched = fetch(event.request).then((response) => {
-				if (response.ok && (url.pathname.startsWith('/_app/') || url.pathname === '/')) {
+				if (response.ok && (url.pathname.startsWith('/_app/') || url.pathname === '/' || url.pathname.endsWith('.png') || url.pathname.endsWith('.svg'))) {
 					const clone = response.clone();
 					caches.open(CACHE).then((cache) => cache.put(event.request, clone));
 				}
