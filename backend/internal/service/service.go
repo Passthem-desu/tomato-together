@@ -1135,13 +1135,33 @@ func (s *Service) SkipRest(tokenValue string) error {
 		return err
 	}
 
-	// Clear rest from the latest session (set rest_duration to 0)
 	latest, err := s.repo.GetLatestSessionByMemberID(token.MemberID)
 	if err != nil || latest == nil {
 		return ErrNoActiveSession
 	}
 
-	err = s.repo.EndSessionWithRest(latest.ID, latest.EndedAt, latest.Duration, 0, false)
+	now := time.Now()
+	var duration int
+
+	if latest.EndedAt == nil {
+		active, err := s.repo.GetActiveSessionByMemberID(token.MemberID)
+		if err == nil && active != nil && active.ID == latest.ID {
+			if active.PausedAt != nil {
+				duration = int(active.PausedAt.Sub(active.StartedAt).Seconds())
+			} else {
+				duration = int(now.Sub(active.StartedAt).Seconds())
+			}
+			if duration < 60 {
+				duration = 0
+			}
+		} else {
+			duration = latest.Duration
+		}
+	} else {
+		duration = latest.Duration
+	}
+
+	err = s.repo.EndSessionWithRest(latest.ID, &now, duration, 0, false)
 	if err != nil {
 		return err
 	}
