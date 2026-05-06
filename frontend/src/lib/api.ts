@@ -110,7 +110,7 @@ function getAccessToken(): string | null {
 }
 
 async function tryRefresh(): Promise<boolean> {
-	const refreshToken = localStorage.getItem('refresh_token');
+	const refreshToken = localStorage.getItem('refresh_token_' + getDeviceId());
 	if (!refreshToken) return false;
 
 	if (refreshPromise) return refreshPromise;
@@ -127,7 +127,7 @@ async function tryRefresh(): Promise<boolean> {
 			const data = await response.json();
 			if (data.success) {
 				localStorage.setItem('access_token', data.data.access_token);
-				localStorage.setItem('refresh_token', data.data.refresh_token);
+				localStorage.setItem('refresh_token_' + getDeviceId(), data.data.refresh_token);
 				return true;
 			}
 			return false;
@@ -529,6 +529,18 @@ export const api = {
 	},
 };
 
+// Device ID for per-device refresh token storage
+function getDeviceId(): string {
+	if (typeof window === 'undefined') return '';
+	const key = 'device_id';
+	let deviceId = localStorage.getItem(key);
+	if (!deviceId) {
+		deviceId = crypto.randomUUID();
+		localStorage.setItem(key, deviceId);
+	}
+	return deviceId;
+}
+
 // Store helpers
 export function saveAuth(token: string, roomName: string, member: Member, room?: Room) {
 	localStorage.setItem('token', token);
@@ -541,13 +553,19 @@ export function saveAuth(token: string, roomName: string, member: Member, room?:
 
 export function saveJWT(accessToken: string, refreshToken: string) {
 	localStorage.setItem('access_token', accessToken);
-	localStorage.setItem('refresh_token', refreshToken);
+	localStorage.setItem('refresh_token_' + getDeviceId(), refreshToken);
 }
 
 export function clearAuth() {
-	['token', 'access_token', 'refresh_token', 'room_name', 'member', 'room'].forEach((k) =>
+	['token', 'access_token', 'room_name', 'member', 'room'].forEach((k) =>
 		localStorage.removeItem(k)
 	);
+	for (let i = localStorage.length - 1; i >= 0; i--) {
+		const key = localStorage.key(i);
+		if (key?.startsWith('refresh_token_')) {
+			localStorage.removeItem(key);
+		}
+	}
 }
 
 export function getRoom(): Room | null {

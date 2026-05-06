@@ -375,6 +375,18 @@ func (r *Repository) CreateTask(task *models.Task) error {
 	return err
 }
 
+func (r *Repository) CreateTaskInTx(tx *sql.Tx, task *models.Task) error {
+	var maxSort int
+	err := tx.QueryRow(`SELECT COALESCE(MAX(sort_order), -1) FROM tasks WHERE member_id = ? AND room_id = ?`, task.MemberID, task.RoomID).Scan(&maxSort)
+	if err != nil {
+		return err
+	}
+	task.SortOrder = maxSort + 1
+	query := `INSERT INTO tasks (id, client_id, member_id, room_id, tag_id, title, status, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err = tx.Exec(query, task.ID, task.ClientID, task.MemberID, task.RoomID, task.TagID, task.Title, task.Status, task.SortOrder, task.CreatedAt, task.UpdatedAt)
+	return err
+}
+
 func (r *Repository) GetTaskByID(id string) (*models.Task, error) {
 	query := `SELECT id, client_id, member_id, room_id, tag_id, title, status, sort_order, created_at, updated_at, completed_at FROM tasks WHERE id = ?`
 	return r.scanTask(query, id)
@@ -415,6 +427,12 @@ func (r *Repository) GetTaskByClientIDAndMember(clientID, memberID string) (*mod
 	return r.scanTask(query, clientID, memberID)
 }
 
+// GetTaskByClientIDAndMemberInTx retrieves a task by client_id and member_id within a transaction
+func (r *Repository) GetTaskByClientIDAndMemberInTx(tx *sql.Tx, clientID, memberID string) (*models.Task, error) {
+	query := `SELECT id, client_id, member_id, room_id, tag_id, title, status, sort_order, created_at, updated_at, completed_at FROM tasks WHERE client_id = ? AND member_id = ?`
+	return r.scanTaskInTx(tx, query, clientID, memberID)
+}
+
 func (r *Repository) UpdateTaskWithSort(taskID string, title, status, tagID string, sortOrder int, completedAt *time.Time) error {
 	query := `UPDATE tasks SET title = COALESCE(NULLIF(?, ''), title), status = COALESCE(NULLIF(?, ''), status), tag_id = ?, sort_order = ?, updated_at = ?`
 	args := []interface{}{title, status, tagID, sortOrder, time.Now()}
@@ -428,8 +446,39 @@ func (r *Repository) UpdateTaskWithSort(taskID string, title, status, tagID stri
 	return err
 }
 
+func (r *Repository) UpdateTaskWithSortInTx(tx *sql.Tx, taskID string, title, status, tagID string, sortOrder int, completedAt *time.Time) error {
+	query := `UPDATE tasks SET title = COALESCE(NULLIF(?, ''), title), status = COALESCE(NULLIF(?, ''), status), tag_id = ?, sort_order = ?, updated_at = ?`
+	args := []interface{}{title, status, tagID, sortOrder, time.Now()}
+	if completedAt != nil {
+		query += `, completed_at = ?`
+		args = append(args, *completedAt)
+	}
+	query += ` WHERE id = ?`
+	args = append(args, taskID)
+	_, err := tx.Exec(query, args...)
+	return err
+}
+
 func (r *Repository) scanTask(query string, args ...interface{}) (*models.Task, error) {
 	row := r.db.QueryRow(query, args...)
+	task := &models.Task{}
+	var tagID sql.NullString
+	var completedAt sql.NullTime
+	err := row.Scan(&task.ID, &task.ClientID, &task.MemberID, &task.RoomID, &tagID, &task.Title, &task.Status, &task.SortOrder, &task.CreatedAt, &task.UpdatedAt, &completedAt)
+	if err != nil {
+		return nil, err
+	}
+	if tagID.Valid {
+		task.TagID = tagID.String
+	}
+	if completedAt.Valid {
+		task.CompletedAt = &completedAt.Time
+	}
+	return task, nil
+}
+
+func (r *Repository) scanTaskInTx(tx *sql.Tx, query string, args ...interface{}) (*models.Task, error) {
+	row := tx.QueryRow(query, args...)
 	task := &models.Task{}
 	var tagID sql.NullString
 	var completedAt sql.NullTime

@@ -1375,6 +1375,13 @@ func (s *Service) RefreshToken(tokenValue string) error {
 		}
 		return s.repo.UpdateTokenHeartbeat(token.ID)
 	}
+	// For JWT tokens, find the member's room_token and update its heartbeat
+	if tokenInfo.IsJWT {
+		token, err := s.repo.GetTokenByMemberAndRoom(tokenInfo.MemberID, tokenInfo.RoomID)
+		if err == nil {
+			return s.repo.UpdateTokenHeartbeat(token.ID)
+		}
+	}
 	return nil
 }
 
@@ -1467,59 +1474,61 @@ func (s *Service) DeleteTask(taskID, memberID string) error {
 
 func (s *Service) SyncTasks(memberID, roomID string, items []models.SyncTaskItem) (*models.SyncTasksResponse, error) {
 	result := &models.SyncTasksResponse{}
-	for _, item := range items {
-		existing, err := s.repo.GetTaskByClientIDAndMember(item.ClientID, memberID)
-		if err == sql.ErrNoRows {
-			// INSERT: task doesn't exist on server yet
-			createdAt, _ := time.Parse(time.RFC3339, item.CreatedAt)
-			t := &models.Task{
-				ID:        uuid.New().String(),
-				ClientID:  item.ClientID,
-				MemberID:  memberID,
-				RoomID:    roomID,
-				TagID:     item.TagID,
-				Title:     item.Title,
-				Status:    item.Status,
-				CreatedAt: createdAt,
-				UpdatedAt: time.Now(),
-			}
-			if err := s.repo.CreateTask(t); err == nil {
-				result.Synced++
-				result.Tasks = append(result.Tasks, models.SyncTaskResult{
-					ClientID: item.ClientID,
-					ServerID: t.ID,
-				})
-			}
-		} else if err != nil {
-			continue
-		} else {
-			// Task exists — detect conflicts by comparing updated_at
-			clientUpdatedAt, parseErr := time.Parse(time.RFC3339, item.UpdatedAt)
-			if parseErr != nil || !existing.UpdatedAt.After(clientUpdatedAt) {
-				// UPDATE: client is newer or equal, or client didn't send updated_at
-				var completedAt *time.Time
-				if item.Status == "DONE" {
-					now := time.Now()
-					completedAt = &now
+	err := s.repo.RunInTx(func(tx *sql.Tx) error {
+		for _, item := range items {
+			existing, err := s.repo.GetTaskByClientIDAndMemberInTx(tx, item.ClientID, memberID)
+			if err == sql.ErrNoRows {
+				createdAt, _ := time.Parse(time.RFC3339, item.CreatedAt)
+				t := &models.Task{
+					ID:        uuid.New().String(),
+					ClientID:  item.ClientID,
+					MemberID:  memberID,
+					RoomID:    roomID,
+					TagID:     item.TagID,
+					Title:     item.Title,
+					Status:    item.Status,
+					CreatedAt: createdAt,
+					UpdatedAt: time.Now(),
 				}
-				if err := s.repo.UpdateTaskWithSort(existing.ID, item.Title, item.Status, item.TagID, item.SortOrder, completedAt); err == nil {
+				if err := s.repo.CreateTaskInTx(tx, t); err == nil {
 					result.Synced++
 					result.Tasks = append(result.Tasks, models.SyncTaskResult{
 						ClientID: item.ClientID,
-						ServerID: existing.ID,
+						ServerID: t.ID,
 					})
 				}
+			} else if err != nil {
+				continue
 			} else {
-				// CONFLICT: server is newer, don't overwrite
-				result.Conflicts = append(result.Conflicts, models.ConflictItem{
-					ClientID:        item.ClientID,
-					ServerTitle:     existing.Title,
-					ServerStatus:    existing.Status,
-					ServerUpdatedAt: existing.UpdatedAt.Format(time.RFC3339),
-					ClientUpdatedAt: item.UpdatedAt,
-				})
+				clientUpdatedAt, parseErr := time.Parse(time.RFC3339, item.UpdatedAt)
+				if parseErr != nil || !existing.UpdatedAt.After(clientUpdatedAt) {
+					var completedAt *time.Time
+					if item.Status == "DONE" {
+						now := time.Now()
+						completedAt = &now
+					}
+					if err := s.repo.UpdateTaskWithSortInTx(tx, existing.ID, item.Title, item.Status, item.TagID, item.SortOrder, completedAt); err == nil {
+						result.Synced++
+						result.Tasks = append(result.Tasks, models.SyncTaskResult{
+							ClientID: item.ClientID,
+							ServerID: existing.ID,
+						})
+					}
+				} else {
+					result.Conflicts = append(result.Conflicts, models.ConflictItem{
+						ClientID:        item.ClientID,
+						ServerTitle:     existing.Title,
+						ServerStatus:    existing.Status,
+						ServerUpdatedAt: existing.UpdatedAt.Format(time.RFC3339),
+						ClientUpdatedAt: item.UpdatedAt,
+					})
+				}
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return result, nil
 }

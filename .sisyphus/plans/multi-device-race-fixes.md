@@ -696,7 +696,7 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
   - Message: `feat(tasks): add batch delete endpoint for tombstones`
   - Files: `backend/internal/api/handler.go`, `frontend/src/lib/taskStore.ts`
 
-- [ ] 12. Fix SSE `user_left` to be per-member (not per-connection)
+- [x] 12. Fix SSE `user_left` to be per-member (not per-connection)
 
   **What to do**:
   - In `backend/internal/sse/hub.go`, modify the unregister flow (lines 122-157):
@@ -748,7 +748,7 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
   - Message: `fix(sse): broadcast user_left only when last connection drops`
   - Files: `backend/internal/sse/hub.go`
 
-- [ ] 13. Tomato settings localStorage persistence + load on mount
+- [x] 13. Tomato settings localStorage persistence + load on mount
 
   **What to do**:
   - In `frontend/src/routes/room/+page.svelte`:
@@ -815,7 +815,7 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
   - Message: `feat(settings): persist tomato settings to localStorage`
   - Files: `frontend/src/routes/room/+page.svelte`, `frontend/src/lib/components/SettingsPanel.svelte`
 
-- [ ] 14. Fix JWT refresh rotation to not invalidate sibling devices
+- [x] 14. Fix JWT refresh rotation to not invalidate sibling devices
 
   **What to do**:
   - In `backend/internal/service/jwt.go`, modify `RefreshAccessToken` (lines 155-199):
@@ -869,7 +869,7 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
   - Message: `fix(jwt): prevent refresh rotation from invalidating sibling devices`
   - Files: `backend/internal/service/jwt.go`, `frontend/src/lib/api.ts`
 
-- [ ] 15. Add JWT heartbeat mechanism via `last_used_at` on refresh_tokens
+- [x] 15. Add JWT heartbeat mechanism via `last_used_at` on refresh_tokens
 
   **What to do**:
   - Add `last_used_at DATETIME` column to `refresh_tokens` table via migration (or just use the existing `created_at`/`revoked_at` pattern).
@@ -917,7 +917,7 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
   - Message: `fix(sse): add JWT heartbeat to prevent timeout for JWT-authenticated connections`
   - Files: `backend/internal/api/handler.go`, `backend/internal/service/service.go`
 
-- [ ] 16. Wrap SyncTasks in a database transaction
+- [x] 16. Wrap SyncTasks in a database transaction
 
   **What to do**:
   - In `backend/internal/service/service.go`, modify `SyncTasks` (lines 1395-1419):

@@ -127,10 +127,21 @@ func (h *Hub) Run() {
 				if _, ok := clients[client]; ok {
 					delete(clients, client)
 					close(client.notify)
-					shouldBroadcast = true
+
 					roomName = client.RoomName
 					memberID = client.MemberID
 					username = client.Username
+
+					// Only broadcast user_left if this was the LAST connection for this member
+					shouldBroadcast = memberID != ""
+					if shouldBroadcast {
+						for remainingClient := range clients {
+							if remainingClient.MemberID == memberID {
+								shouldBroadcast = false
+								break
+							}
+						}
+					}
 
 					// Decrement IP connection counter
 					h.connectionsByIP[client.IP]--
@@ -265,22 +276,49 @@ func (h *Hub) broadcastToRoom(roomName, event string, data interface{}) {
 	}
 }
 
+// countMemberConnections counts clients in room with matching memberID.
+// Uses RLock internally.
+func (h *Hub) countMemberConnections(memberID, roomName string) int {
+	if memberID == "" {
+		return 0
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if clients, ok := h.rooms[roomName]; ok {
+		count := 0
+		for client := range clients {
+			if client.MemberID == memberID {
+				count++
+			}
+		}
+		return count
+	}
+	return 0
+}
+
 // GetOnlineUsers returns all online users in a room based on heartbeat
 func (h *Hub) GetOnlineUsers(roomName string) []*models.UserInfo {
-	users := make([]*models.UserInfo, 0)
-
 	h.mu.RLock()
 	clients := h.rooms[roomName]
 	h.mu.RUnlock()
 
+	seen := make(map[string]bool)
+	users := make([]*models.UserInfo, 0)
+
 	for client := range clients {
-		user := &models.UserInfo{
+		if client.MemberID == "" {
+			continue
+		}
+		if seen[client.MemberID] {
+			continue
+		}
+		seen[client.MemberID] = true
+		users = append(users, &models.UserInfo{
 			ID:       client.MemberID,
 			Username: client.Username,
 			IsOwner:  client.IsOwner,
 			IsOnline: true,
-		}
-		users = append(users, user)
+		})
 	}
 
 	return users
@@ -331,12 +369,14 @@ func (h *Hub) runHeartbeatChecker() {
 			}
 			h.mu.Unlock()
 
-			// Broadcast user_left for stale clients outside lock
+			// Broadcast user_left for stale clients only if last connection per member
 			for _, info := range staleClients {
-				h.broadcastToRoom(info.roomName, "user_left", map[string]interface{}{
-					"user_id":  info.memberID,
-					"username": info.username,
-				})
+				if info.memberID != "" && h.countMemberConnections(info.memberID, info.roomName) == 0 {
+					h.broadcastToRoom(info.roomName, "user_left", map[string]interface{}{
+						"user_id":  info.memberID,
+						"username": info.username,
+					})
+				}
 			}
 
 		case <-h.stopCh:

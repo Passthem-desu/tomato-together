@@ -146,11 +146,22 @@
 		}
 	});
 
+	// ── Persist settings to localStorage ──
+	$effect(() => {
+		void plannedMinutes;
+		void restMinutes;
+		void longBreakMinutes;
+		void totalSessions;
+		void sessionsBeforeLong;
+		scheduleSave();
+	});
+
 	onMount(() => {
 		if (!$currentMember) {
 			goto('/');
 			return;
 		}
+		loadSettings();
 		refreshRoomUsers();
 		connectSSE();
 		restorePomodoroState();
@@ -273,6 +284,8 @@
 	}
 
 	const NOTIFY_KEY = 'tomatogether_notify';
+	const SETTINGS_KEY = 'tomatogether_settings';
+
 	function loadNotifyPref(): boolean {
 		try {
 			return localStorage.getItem(NOTIFY_KEY) === 'true';
@@ -282,6 +295,42 @@
 	}
 	function saveNotifyPref(v: boolean) {
 		localStorage.setItem(NOTIFY_KEY, String(v));
+	}
+
+	function loadSettings() {
+		try {
+			const raw = localStorage.getItem(SETTINGS_KEY);
+			if (!raw) return;
+			const s = JSON.parse(raw);
+			if (typeof s.plannedMinutes === 'number') plannedMinutes = s.plannedMinutes;
+			if (typeof s.restMinutes === 'number') restMinutes = s.restMinutes;
+			if (typeof s.longBreakMinutes === 'number') longBreakMinutes = s.longBreakMinutes;
+			if (typeof s.totalSessions === 'number') totalSessions = s.totalSessions;
+			if (typeof s.sessionsBeforeLong === 'number') sessionsBeforeLong = s.sessionsBeforeLong;
+		} catch {
+			/* ignore corrupt data */
+		}
+	}
+
+	let _saveTimer: ReturnType<typeof setTimeout> | null = null;
+	function scheduleSave() {
+		if (_saveTimer) clearTimeout(_saveTimer);
+		_saveTimer = setTimeout(() => {
+			try {
+				localStorage.setItem(
+					SETTINGS_KEY,
+					JSON.stringify({
+						plannedMinutes,
+						restMinutes,
+						longBreakMinutes,
+						totalSessions,
+						sessionsBeforeLong,
+					})
+				);
+			} catch {
+				/* ignore */
+			}
+		}, 500);
 	}
 
 	function notify(title: string, body: string) {
