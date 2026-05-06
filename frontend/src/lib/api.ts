@@ -491,7 +491,10 @@ export const api = {
 	// JWT token management
 	refreshToken: async (
 		refreshToken: string
-	): Promise<{ success: boolean; data: { access_token: string; refresh_token: string; expires_in: number } }> => {
+	): Promise<{
+		success: boolean;
+		data: { access_token: string; refresh_token: string; expires_in: number };
+	}> => {
 		return apiRequest('/auth/refresh', {
 			method: 'POST',
 			body: JSON.stringify({ refresh_token: refreshToken }),

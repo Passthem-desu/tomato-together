@@ -16,17 +16,17 @@ import (
 )
 
 var (
-	ErrInvalidRefreshToken  = errors.New("invalid_refresh_token")
-	ErrRefreshTokenRevoked  = errors.New("refresh_token_revoked")
-	ErrRefreshTokenExpired  = errors.New("refresh_token_expired")
-	ErrJWTSecretNotSet      = errors.New("jwt_secret_not_set")
+	ErrInvalidRefreshToken = errors.New("invalid_refresh_token")
+	ErrRefreshTokenRevoked = errors.New("refresh_token_revoked")
+	ErrRefreshTokenExpired = errors.New("refresh_token_expired")
+	ErrJWTSecretNotSet     = errors.New("jwt_secret_not_set")
 )
 
 // jwtConfig holds JWT configuration read from environment variables.
 type jwtConfig struct {
-	Secret          []byte
-	AccessExpiry    time.Duration
-	RefreshExpiry   time.Duration
+	Secret        []byte
+	AccessExpiry  time.Duration
+	RefreshExpiry time.Duration
 }
 
 func loadJWTConfig() *jwtConfig {

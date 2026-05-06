@@ -239,40 +239,40 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 			if req.Password == "" || !checkPassword(req.Password, existingMember.PasswordHash) {
 				return nil, ErrInvalidPassword
 			}
-		// Password correct - create new token (multi-device: keep existing tokens)
-		tokenValue, err := generateToken()
-		if err != nil {
-			return nil, err
-		}
-		token := &models.RoomToken{
-			ID:            uuid.New().String(),
-			MemberID:      existingMember.ID,
-			RoomID:        room.ID,
-			Token:         tokenValue,
-			CreatedAt:     time.Now(),
-			ExpiresAt:     time.Now().Add(tokenExpiry),
-			LastHeartbeat: time.Now(),
-		}
-		if err := s.repo.CreateToken(token); err != nil {
-			return nil, err
-		}
-		resp := &models.RoomResponse{
-			Room: &models.RoomInfo{
-				ID:          room.ID,
-				Name:        room.Name,
-				IsReadonly:  room.IsReadonly,
-				HasPassword: room.PasswordHash != "",
-			},
-			Member: &models.MemberInfo{
-				ID:           existingMember.ID,
-				Username:     existingMember.Username,
-				IsOwner:      existingMember.IsOwner,
-				IsPersistent: existingMember.IsPersistent,
-			},
-			Token: token.Token,
-		}
-		s.addJWTToResponse(resp, existingMember)
-		return resp, nil
+			// Password correct - create new token (multi-device: keep existing tokens)
+			tokenValue, err := generateToken()
+			if err != nil {
+				return nil, err
+			}
+			token := &models.RoomToken{
+				ID:            uuid.New().String(),
+				MemberID:      existingMember.ID,
+				RoomID:        room.ID,
+				Token:         tokenValue,
+				CreatedAt:     time.Now(),
+				ExpiresAt:     time.Now().Add(tokenExpiry),
+				LastHeartbeat: time.Now(),
+			}
+			if err := s.repo.CreateToken(token); err != nil {
+				return nil, err
+			}
+			resp := &models.RoomResponse{
+				Room: &models.RoomInfo{
+					ID:          room.ID,
+					Name:        room.Name,
+					IsReadonly:  room.IsReadonly,
+					HasPassword: room.PasswordHash != "",
+				},
+				Member: &models.MemberInfo{
+					ID:           existingMember.ID,
+					Username:     existingMember.Username,
+					IsOwner:      existingMember.IsOwner,
+					IsPersistent: existingMember.IsPersistent,
+				},
+				Token: token.Token,
+			}
+			s.addJWTToResponse(resp, existingMember)
+			return resp, nil
 		} else {
 			// Existing anonymous user - allow re-join and inherit data
 			if req.Password == "" {
@@ -345,23 +345,23 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 				if err != nil {
 					return nil, err
 				}
-			resp := &models.RoomResponse{
-				Room: &models.RoomInfo{
-					ID:          room.ID,
-					Name:        room.Name,
-					IsReadonly:  room.IsReadonly,
-					HasPassword: room.PasswordHash != "",
-				},
-				Member: &models.MemberInfo{
-					ID:           existingMember.ID,
-					Username:     existingMember.Username,
-					IsOwner:      existingMember.IsOwner,
-					IsPersistent: true,
-				},
-				Token: token.Token,
-			}
-			s.addJWTToResponse(resp, existingMember)
-			return resp, nil
+				resp := &models.RoomResponse{
+					Room: &models.RoomInfo{
+						ID:          room.ID,
+						Name:        room.Name,
+						IsReadonly:  room.IsReadonly,
+						HasPassword: room.PasswordHash != "",
+					},
+					Member: &models.MemberInfo{
+						ID:           existingMember.ID,
+						Username:     existingMember.Username,
+						IsOwner:      existingMember.IsOwner,
+						IsPersistent: true,
+					},
+					Token: token.Token,
+				}
+				s.addJWTToResponse(resp, existingMember)
+				return resp, nil
 			}
 		}
 	}
