@@ -30,6 +30,12 @@ const (
 	MinPasswordLen       = 6
 )
 
+// Timestamp validation bounds
+var (
+	minValidTime  = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	maxFutureSkew = 5 * time.Minute
+)
+
 var (
 	ErrRoomNotFound         = errors.New("room_not_found")
 	ErrMemberNotFound       = errors.New("member_not_found")
@@ -1476,9 +1482,18 @@ func (s *Service) SyncTasks(memberID, roomID string, items []models.SyncTaskItem
 	result := &models.SyncTasksResponse{}
 	err := s.repo.RunInTx(func(tx *sql.Tx) error {
 		for _, item := range items {
+			createdAt, parseErr := time.Parse(time.RFC3339, item.CreatedAt)
+			if parseErr != nil || createdAt.Before(minValidTime) || createdAt.After(time.Now().Add(maxFutureSkew)) {
+				log.Printf("SyncTasks: skipping task %s: invalid created_at %s", item.ClientID, item.CreatedAt)
+				continue
+			}
+			updatedAt, parseErr := time.Parse(time.RFC3339, item.UpdatedAt)
+			if parseErr != nil || updatedAt.Before(minValidTime) || updatedAt.After(time.Now().Add(maxFutureSkew)) {
+				log.Printf("SyncTasks: skipping task %s: invalid updated_at %s", item.ClientID, item.UpdatedAt)
+				continue
+			}
 			existing, err := s.repo.GetTaskByClientIDAndMemberInTx(tx, item.ClientID, memberID)
 			if err == sql.ErrNoRows {
-				createdAt, _ := time.Parse(time.RFC3339, item.CreatedAt)
 				t := &models.Task{
 					ID:        uuid.New().String(),
 					ClientID:  item.ClientID,
@@ -1500,8 +1515,7 @@ func (s *Service) SyncTasks(memberID, roomID string, items []models.SyncTaskItem
 			} else if err != nil {
 				continue
 			} else {
-				clientUpdatedAt, parseErr := time.Parse(time.RFC3339, item.UpdatedAt)
-				if parseErr != nil || !existing.UpdatedAt.After(clientUpdatedAt) {
+				if !existing.UpdatedAt.After(updatedAt) {
 					var completedAt *time.Time
 					if item.Status == "DONE" {
 						now := time.Now()

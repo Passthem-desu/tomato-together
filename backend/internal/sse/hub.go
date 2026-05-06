@@ -407,6 +407,8 @@ func (h *Hub) runTickBroadcaster() {
 
 					session, err := h.repo.GetActiveSessionByMemberID(client.MemberID)
 					if err == nil && session != nil {
+						// time.Since() uses Go's monotonic clock — safe against wall-clock adjustments.
+						// Go 1.9+ guarantees monotonic clock for time.Since/time.Until.
 						elapsed := int(time.Since(session.StartedAt).Seconds())
 						remaining := session.PlannedDuration - elapsed
 						if remaining < 0 {

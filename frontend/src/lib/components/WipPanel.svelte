@@ -21,7 +21,7 @@
 
 	function markDirty() {
 		dirty = true;
-		if (isPersistent) scheduleAutoSync();
+		scheduleAutoSync();
 	}
 
 	function scheduleAutoSync() {
@@ -191,7 +191,7 @@
 
 	onMount(() => {
 		loadData();
-		if (isPersistent) scheduleAutoSync();
+		scheduleAutoSync();
 	});
 </script>
 
