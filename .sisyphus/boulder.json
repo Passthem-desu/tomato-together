@@ -4,12 +4,16 @@
   "session_ids": [
     "ses_20204d158ffeUlkEuo4mopOm2x",
     "ses_2017dc413ffeJ1HYetZSnf1YfS",
-    "ses_2017d62feffe3QPCXRHq1IF0UB"
+    "ses_2017d62feffe3QPCXRHq1IF0UB",
+    "ses_201691445ffeOoONK3wDTfnh6D",
+    "ses_20168d70fffeSW3Bu5IBERrjLt"
   ],
   "session_origins": {
     "ses_20204d158ffeUlkEuo4mopOm2x": "direct",
     "ses_2017dc413ffeJ1HYetZSnf1YfS": "appended",
-    "ses_2017d62feffe3QPCXRHq1IF0UB": "appended"
+    "ses_2017d62feffe3QPCXRHq1IF0UB": "appended",
+    "ses_201691445ffeOoONK3wDTfnh6D": "appended",
+    "ses_20168d70fffeSW3Bu5IBERrjLt": "appended"
   },
   "plan_name": "multi-device-race-fixes",
   "agent": "atlas",

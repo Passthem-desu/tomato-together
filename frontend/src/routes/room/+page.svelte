@@ -258,6 +258,12 @@
 			const resp = await api.getPomodoroStatus();
 			if (resp.data) {
 				pomodoroStatus.set(resp.data);
+				if (
+					resp.data.sessions_completed !== undefined &&
+					resp.data.sessions_completed > 0
+				) {
+					sessionIndex = resp.data.sessions_completed;
+				}
 				if (resp.data.remaining_seconds !== undefined) {
 					if (resp.data.phase === 'paused') {
 						countdown.start(resp.data.remaining_seconds);

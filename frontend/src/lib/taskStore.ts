@@ -13,6 +13,7 @@ export interface LocalTask {
 	updated_at: string;
 	server_id?: string;
 	sort_order?: number;
+	_synced_at?: string; // timestamp of last successful sync — NOT persisted to server
 }
 
 function load(): LocalTask[] {
@@ -92,7 +93,12 @@ export const taskStore = {
 	async syncWithServer(roomName: string): Promise<LocalTask[]> {
 		const local = load();
 
-		const unsynced = local;
+		// Push only new tasks (no server_id) or modified since last sync
+		const unsynced = local.filter(
+			(t) =>
+				!t._synced_at ||
+				new Date(t.updated_at).getTime() > new Date(t._synced_at!).getTime()
+		);
 		if (unsynced.length > 0) {
 			try {
 				const resp = await api.syncTasks(
@@ -120,6 +126,14 @@ export const taskStore = {
 				}
 			} catch {
 				/* offline */
+			}
+		}
+
+		// Mark synced tasks as clean
+		const now = new Date().toISOString();
+		for (const t of local) {
+			if (unsynced.some((u) => u.client_id === t.client_id)) {
+				t._synced_at = now;
 			}
 		}
 
@@ -170,6 +184,20 @@ export const taskStore = {
 			}
 		} catch {
 			/* offline */
+		}
+
+		// Remove local tasks that have a server_id but are no longer on server (deleted by another device)
+		const serverIds = new Set(serverTasks.map((t) => t.id));
+		const toRemove = local.filter((t) => t.server_id && !serverIds.has(t.server_id));
+		for (const t of toRemove) {
+			const idx = local.indexOf(t);
+			if (idx !== -1) local.splice(idx, 1);
+		}
+
+		// Mark all remaining tasks as synced after pull
+		const syncTime = new Date().toISOString();
+		for (const t of local) {
+			t._synced_at = syncTime;
 		}
 
 		local.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
