@@ -117,11 +117,11 @@
 		align-items: center;
 	}
 	.tag-row {
-		display: flex;
-		align-items: center;
-		gap: 0;
+		position: relative;
+		display: inline-flex;
 	}
 	.tag-chip {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		padding: 0.2rem 0.6rem;
@@ -143,20 +143,24 @@
 		border-color: var(--color-accent);
 	}
 	.tag-delete {
+		position: absolute;
+		top: -4px;
+		right: -4px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 18px;
-		height: 18px;
+		width: 16px;
+		height: 16px;
 		border: none;
 		background: none;
 		color: var(--color-text-muted);
-		font-size: 1rem;
+		font-size: 0.9rem;
 		cursor: pointer;
 		border-radius: 50%;
-		margin-left: -2px;
 		opacity: 0;
 		transition: opacity 0.15s;
+		padding: 0;
+		z-index: 1;
 	}
 	.tag-row:hover .tag-delete {
 		opacity: 1;
