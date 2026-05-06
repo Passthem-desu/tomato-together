@@ -36,6 +36,24 @@
       "agent": "Sisyphus-Junior",
       "category": "deep",
       "updated_at": "2026-05-06T16:42:53.245Z"
+    },
+    "todo:17": {
+      "task_key": "todo:17",
+      "task_label": "17",
+      "task_title": "Validate client timestamps in SyncTasks",
+      "session_id": "ses_201c721c0ffeIKlXw0zteAEGo0",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-05-06T16:59:10.833Z"
+    },
+    "todo:20": {
+      "task_key": "todo:20",
+      "task_label": "20",
+      "task_title": "Add tests for all fixes",
+      "session_id": "ses_201b6fceeffeDq24zJTa3GYy7E",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-05-06T17:15:11.962Z"
     }
   }
 }

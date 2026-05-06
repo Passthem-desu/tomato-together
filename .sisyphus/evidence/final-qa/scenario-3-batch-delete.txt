@@ -1,0 +1,38 @@
+SCENARIO 3: DELETE /api/tasks/batch with multiple IDs → verify batch delete
+================================================================================
+Date: 2026-05-07T01:12 UTC (RE-TEST AFTER FIX)
+Server: localhost:8081 (rebuild with route fix)
+Room: qa-test-room | User: qatester (persistent)
+
+PRECONDITIONS:
+- 3 test tasks created via POST /api/tasks
+- IDs confirmed in DB with correct member_id
+
+EXECUTION:
+  DELETE /api/tasks/batch
+  {"task_ids":["<uuid1>","<uuid2>","<uuid3>"]}
+
+  → Response: HTTP 200 {"success":true,"data":{"deleted":3}}
+  → Deleted count: 3 ✓
+  → DB tasks remaining with client_id LIKE 'ci-s3-%': 0 ✓
+
+FIX APPLIED (handler.go):
+  Moved /tasks/sync and /tasks/batch route registrations ABOVE /tasks/{id} in RegisterRoutes().
+  
+  BEFORE (buggy):
+    authRouter.HandleFunc("/tasks/{id}", h.UpdateTask).Methods(http.MethodPut)
+    authRouter.HandleFunc("/tasks/{id}", h.DeleteTask).Methods(http.MethodDelete)
+    authRouter.HandleFunc("/tasks/sync", h.SyncTasks).Methods(http.MethodPost)
+    authRouter.HandleFunc("/tasks/batch", h.DeleteTasksBatch).Methods(http.MethodDelete)
+
+  AFTER (fixed):
+    authRouter.HandleFunc("/tasks/sync", h.SyncTasks).Methods(http.MethodPost)
+    authRouter.HandleFunc("/tasks/batch", h.DeleteTasksBatch).Methods(http.MethodDelete)
+    authRouter.HandleFunc("/tasks/{id}", h.UpdateTask).Methods(http.MethodPut)
+    authRouter.HandleFunc("/tasks/{id}", h.DeleteTask).Methods(http.MethodDelete)
+
+  gorilla/mux matched DELETE /tasks/batch to /tasks/{id} (id="batch") because
+  parameterized routes were registered first. Fixed by registering specific
+  routes before parameterized ones.
+
+VERDICT: PASS ✓ (after fix)

@@ -958,7 +958,7 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
 
 ---
 
-- [ ] 17. Validate client timestamps in SyncTasks
+- [x] 17. Validate client timestamps in SyncTasks
 
   **What to do**:
   - In `backend/internal/service/service.go`, in the upsert-based `SyncTasks`:
@@ -994,7 +994,7 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
   - Message: `fix(sync): validate client timestamps in SyncTasks`
   - Files: `backend/internal/service/service.go`
 
-- [ ] 18. Enable auto-sync for anonymous users
+- [x] 18. Enable auto-sync for anonymous users
 
   **What to do**:
   - In `frontend/src/lib/components/WipPanel.svelte` (line 193-194):
@@ -1034,7 +1034,7 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
   - Message: `fix(frontend): enable auto-sync for anonymous users`
   - Files: `frontend/src/lib/components/WipPanel.svelte`
 
-- [ ] 19. Replace `time.Since()` in tick with monotonic-safe computation
+- [x] 19. Replace `time.Since()` in tick with monotonic-safe computation
 
   **What to do**:
   - In `backend/internal/sse/hub.go`, `runTickBroadcaster` (lines 368-403):
@@ -1060,7 +1060,7 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
   - Message: `fix(tick): verify monotonic clock safety in tick computation`
   - Files: `backend/internal/sse/hub.go`
 
-- [ ] 20. Add tests for all fixes
+- [x] 20. Add tests for all fixes
 
   **What to do**:
   - In `backend/internal/service/service_test.go`:
@@ -1117,15 +1117,15 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
 
 > 4 review agents run in PARALLEL. ALL must APPROVE. Present results to user and get explicit "okay" before completing.
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
   Read the plan end-to-end. For each "Must Have": verify implementation exists. For each "Must NOT Have": search codebase for forbidden patterns. Check evidence files exist in `.sisyphus/evidence/`. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high`
   Run `make test` in backend. Run `npm run build` in frontend. Review all changed files for: race conditions, empty error handling, SQL injection risks, unclosed resources. Check for AI slop patterns.
   Output: `Build [PASS/FAIL] | Tests [N pass/N fail] | Lint [PASS/FAIL] | VERDICT`
 
-- [ ] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` for UI)
+- [x] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` for UI)
   Start from clean DB state. Execute:
   - Concurrent StartPomodoro test (curl race)
   - Multi-device SSE user_left test (2 browser contexts)
@@ -1136,7 +1136,7 @@ Task 1 → Task 6/7/8 → Task 12 → Task 20 → F1-F4
   Save evidence to `.sisyphus/evidence/final-qa/`.
   Output: `Scenarios [N/N pass] | Edge Cases [N tested] | VERDICT`
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep`
   For each task: read "What to do", read actual diff (git diff). Verify 1:1 — everything in spec was built (no missing), nothing beyond spec was built (no creep). Check "Must NOT do" compliance.
   Output: `Tasks [N/N compliant] | Contamination [CLEAN/N issues] | VERDICT`
 

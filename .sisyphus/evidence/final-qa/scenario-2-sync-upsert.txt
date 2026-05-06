@@ -1,0 +1,56 @@
+SCENARIO 2: POST /api/tasks/sync with client_id → verify upsert (no duplicate)
+================================================================================
+Date: 2026-05-07T01:07 UTC
+Server: localhost:8081
+Room: qa-test-room | User: qatester (persistent)
+
+PRECONDITIONS:
+- Clean tasks table (DELETE FROM tasks)
+
+EXECUTION:
+
+STEP 1 - Initial sync (create):
+  POST /api/tasks/sync
+  {
+    "room_name": "qa-test-room",
+    "tasks": [{
+      "client_id": "ci-upsert-001",
+      "title": "Original",
+      "status": "TODO",
+      "created_at": "2026-05-06T17:07:22Z",
+      "updated_at": "2026-05-06T17:07:22Z"
+    }]
+  }
+  → Response: {"success":true,"data":{"synced":1,"tasks":[{"client_id":"ci-upsert-001","server_id":"626772cb-..."}]}}
+  → DB count for client_id='ci-upsert-001': 1, title='Original'
+
+STEP 2 - Same client_id with updated title+status (UPDATE path):
+  POST /api/tasks/sync
+  {
+    "tasks": [{
+      "client_id": "ci-upsert-001",
+      "title": "Updated Title",
+      "status": "WIP",
+      "created_at": "2026-05-06T17:07:22Z",
+      "updated_at": "2026-05-06T17:07:24Z"  (2s later than step 1)
+    }]
+  }
+  → Response: {"success":true,"data":{"synced":1,"tasks":[{"client_id":"ci-upsert-001","server_id":"626772cb-..."}]}}
+  → Same server_id returned (upsert recognized existing record)
+  → DB count for client_id='ci-upsert-001': 1 (NO DUPLICATE)
+  → DB title: 'Updated Title' (UPDATED)
+  → DB status: 'WIP' (UPDATED)
+
+CONFLICT DETECTION (verified separately):
+  When client updated_at == server updated_at, conflict is returned:
+  {"success":true,"data":{"synced":0,"conflicts":[{
+    "client_id":"ci-upsert-001","server_title":"Original","server_status":"TODO",
+    "server_updated_at":"2026-05-07T01:07:22+08:00",
+    "client_updated_at":"2026-05-06T17:07:22Z"}]}}
+  This correctly reports equal timestamps as conflict (server wins).
+
+VERDICT: PASS ✓
+- Upsert works: creates on first sync, updates on subsequent sync
+- No duplicate entries created
+- Same server_id returned across syncs
+- Conflict detection works correctly

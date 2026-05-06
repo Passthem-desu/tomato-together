@@ -2,7 +2,9 @@ package service
 
 import (
 	"database/sql"
+	"sync"
 	"testing"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -26,6 +28,7 @@ func setupTestService(t *testing.T) (*Service, func()) {
 	CREATE TABLE token_revocations (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL, reason TEXT DEFAULT '', revoked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
 	CREATE TABLE announcements (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, sender_id TEXT NOT NULL, title TEXT NOT NULL, body TEXT DEFAULT '', created_at DATETIME NOT NULL);
 	CREATE TABLE user_statuses (id TEXT PRIMARY KEY, member_id TEXT NOT NULL, room_id TEXT NOT NULL, emoji TEXT DEFAULT '', message TEXT DEFAULT '', updated_at DATETIME NOT NULL, UNIQUE(member_id, room_id));
+	CREATE TABLE tasks (id TEXT PRIMARY KEY, client_id TEXT DEFAULT '', member_id TEXT NOT NULL, room_id TEXT NOT NULL, tag_id TEXT DEFAULT '', title TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'TODO', sort_order INTEGER DEFAULT 0, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, completed_at DATETIME);
 	`
 	if _, err := db.Exec(schema); err != nil {
 		t.Fatalf("Failed to create schema: %v", err)
@@ -326,5 +329,154 @@ func TestKickMember(t *testing.T) {
 	revoked, _ := svc.repo.IsTokenRevoked(joinResp.Token)
 	if !revoked {
 		t.Error("Expected kicked user's token to be revoked")
+	}
+}
+
+func TestConcurrentStartPomodoro(t *testing.T) {
+	svc, cleanup := setupTestService(t)
+	defer cleanup()
+
+	resp, _ := svc.CreateRoom(&models.CreateRoomRequest{
+		RoomName: "testroom",
+		Username: "owner",
+		Password: "owner123",
+	})
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	successCount := 0
+	var errors []error
+
+	// Barrier to ensure goroutines start simultaneously
+	var barrier sync.WaitGroup
+	barrier.Add(1)
+
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			barrier.Wait()
+			_, err := svc.StartPomodoro(resp.Token, &models.StartPomodoroRequest{
+				PlannedDuration: 1500,
+			})
+			mu.Lock()
+			if err != nil {
+				errors = append(errors, err)
+			} else {
+				successCount++
+			}
+			mu.Unlock()
+		}()
+	}
+
+	barrier.Done() // release all goroutines
+	wg.Wait()
+
+	if successCount != 1 {
+		t.Errorf("Expected exactly 1 concurrent StartPomodoro to succeed, got %d (errors: %v)", successCount, errors)
+	}
+}
+
+func TestSyncTasksUpsert(t *testing.T) {
+	svc, cleanup := setupTestService(t)
+	defer cleanup()
+
+	resp, _ := svc.CreateRoom(&models.CreateRoomRequest{
+		RoomName: "testroom",
+		Username: "owner",
+		Password: "owner123",
+	})
+
+	now := time.Now().Format(time.RFC3339)
+	later := time.Now().Add(10 * time.Second).Format(time.RFC3339)
+
+	// First sync - creates the task
+	result, err := svc.SyncTasks(resp.Member.ID, resp.Room.ID, []models.SyncTaskItem{
+		{
+			ClientID:  "client-task-1",
+			Title:     "Original Title",
+			Status:    "TODO",
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+	})
+	if err != nil {
+		t.Fatalf("First SyncTasks failed: %v", err)
+	}
+	if result.Synced != 1 {
+		t.Errorf("Expected 1 synced task (insert), got %d", result.Synced)
+	}
+
+	// Second sync with same client_id - should update, not duplicate
+	result, err = svc.SyncTasks(resp.Member.ID, resp.Room.ID, []models.SyncTaskItem{
+		{
+			ClientID:  "client-task-1",
+			Title:     "Updated Title",
+			Status:    "DONE",
+			CreatedAt: now,
+			UpdatedAt: later,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Second SyncTasks failed: %v", err)
+	}
+	if result.Synced != 1 {
+		t.Errorf("Expected 1 synced task (update), got %d", result.Synced)
+	}
+
+	// Verify only 1 task exists with this client_id
+	tasks, err := svc.GetTasks(resp.Member.ID, resp.Room.ID, "")
+	if err != nil {
+		t.Fatalf("GetTasks failed: %v", err)
+	}
+
+	count := 0
+	for _, task := range tasks {
+		if task.ClientID == "client-task-1" {
+			count++
+			if task.Title != "Updated Title" {
+				t.Errorf("Expected title 'Updated Title' after upsert, got %q", task.Title)
+			}
+			if task.Status != "DONE" {
+				t.Errorf("Expected status 'DONE' after upsert, got %q", task.Status)
+			}
+		}
+	}
+	if count != 1 {
+		t.Errorf("Expected exactly 1 task with client_id 'client-task-1', got %d", count)
+	}
+}
+
+func TestPomodoroDoublePause(t *testing.T) {
+	svc, cleanup := setupTestService(t)
+	defer cleanup()
+
+	resp, _ := svc.CreateRoom(&models.CreateRoomRequest{
+		RoomName: "testroom",
+		Username: "owner",
+		Password: "owner123",
+	})
+
+	// Start pomodoro
+	_, err := svc.StartPomodoro(resp.Token, &models.StartPomodoroRequest{
+		PlannedDuration: 1500,
+	})
+	if err != nil {
+		t.Fatalf("StartPomodoro failed: %v", err)
+	}
+
+	// First pause - should succeed
+	status, err := svc.PausePomodoro(resp.Token)
+	if err != nil {
+		t.Fatalf("First PausePomodoro failed: %v", err)
+	}
+	if status.Phase != "paused" {
+		t.Errorf("Expected phase 'paused' after first pause, got %q", status.Phase)
+	}
+
+	// Second pause - should return error (already paused)
+	_, err = svc.PausePomodoro(resp.Token)
+	if err != ErrAlreadyFollowing {
+		t.Errorf("Expected ErrAlreadyFollowing on double pause, got %v", err)
 	}
 }

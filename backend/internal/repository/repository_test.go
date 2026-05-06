@@ -318,3 +318,61 @@ func TestPomodoroSessionNormalCounted(t *testing.T) {
 		t.Errorf("Expected 1 pomodoro, got %d", totalPomodoros)
 	}
 }
+
+func TestPauseSessionOnEndedSession(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := New(db)
+
+	room, _ := createTestRoom(repo)
+	member, _ := createTestMember(repo, room)
+
+	now := time.Now()
+	session := &models.PomodoroSession{
+		ID:              "session-1",
+		MemberID:        member.ID,
+		RoomID:          room.ID,
+		PlannedDuration: 1500,
+		IsFollowed:      false,
+		StartedAt:       now.Add(-120 * time.Second),
+	}
+	if err := repo.CreatePomodoroSession(session); err != nil {
+		t.Fatalf("CreatePomodoroSession failed: %v", err)
+	}
+
+	if err := repo.EndActiveSessionByMemberID(member.ID); err != nil {
+		t.Fatalf("EndActiveSessionByMemberID failed: %v", err)
+	}
+
+	err := repo.PauseSession(session.ID)
+	if err != ErrSessionNotActive {
+		t.Errorf("Expected ErrSessionNotActive when pausing ended session, got %v", err)
+	}
+}
+
+func TestResumeSessionOnUnpausedSession(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := New(db)
+
+	room, _ := createTestRoom(repo)
+	member, _ := createTestMember(repo, room)
+
+	now := time.Now()
+	session := &models.PomodoroSession{
+		ID:              "session-1",
+		MemberID:        member.ID,
+		RoomID:          room.ID,
+		PlannedDuration: 1500,
+		IsFollowed:      false,
+		StartedAt:       now,
+	}
+	if err := repo.CreatePomodoroSession(session); err != nil {
+		t.Fatalf("CreatePomodoroSession failed: %v", err)
+	}
+
+	err := repo.ResumeSession(session.ID, 0)
+	if err != ErrSessionNotActive {
+		t.Errorf("Expected ErrSessionNotActive when resuming unpaused session, got %v", err)
+	}
+}

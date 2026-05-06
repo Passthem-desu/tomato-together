@@ -81,10 +81,10 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	authRouter.HandleFunc("/tags/{id}", h.DeleteTag).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/tasks", h.GetTasks).Methods(http.MethodGet)
 	authRouter.HandleFunc("/tasks", h.CreateTask).Methods(http.MethodPost)
-	authRouter.HandleFunc("/tasks/{id}", h.UpdateTask).Methods(http.MethodPut)
-	authRouter.HandleFunc("/tasks/{id}", h.DeleteTask).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/tasks/sync", h.SyncTasks).Methods(http.MethodPost)
 	authRouter.HandleFunc("/tasks/batch", h.DeleteTasksBatch).Methods(http.MethodDelete)
+	authRouter.HandleFunc("/tasks/{id}", h.UpdateTask).Methods(http.MethodPut)
+	authRouter.HandleFunc("/tasks/{id}", h.DeleteTask).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/stats/me", h.GetMyStats).Methods(http.MethodGet)
 	authRouter.HandleFunc("/stats/me", h.ResetMyStats).Methods(http.MethodDelete)
 }

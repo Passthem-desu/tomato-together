@@ -82,3 +82,17 @@ Fixed `user_left` SSE event to only fire when the LAST connection for a member d
 - `go build ./...` — clean
 - `go test ./...` — all pass (repository, service, middleware)
 - lsp_diagnostics on hub.go — clean
+
+## F3 QA Findings (2026-05-07)
+
+### Successful patterns
+- Concurrent StartPomodoro guard works: RunInTx serializes requests, exactly 1 succeeds
+- SyncTasks upsert: creates on first sync, updates on subsequent sync with same client_id
+- Conflict detection: equal timestamps trigger conflict (server wins), newer client timestamps update correctly
+
+### Gotchas
+- `minValidTime` is `2025-01-01`, `maxFutureSkew` is 5 minutes. Timestamps more than 5 minutes in the future are rejected silently (synced=0, no error returned).
+- `updated_at` is required in SyncTasks request body. Empty string causes parse failure → silently skipped.
+
+### Bug found & fixed
+- gorilla/mux route ordering: `/tasks/batch` was registered AFTER `/tasks/{id}`, causing DELETE /tasks/batch to be handled by DeleteTask (treating "batch" as task id). Fix: move specific routes before parameterized routes.

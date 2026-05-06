@@ -124,12 +124,10 @@ export const taskStore = {
 		}
 
 		const tombstones = getTombstones();
-		for (const sid of tombstones) {
-			try {
-				await api.deleteTask(sid);
-			} catch {
-				/* ignore */
-			}
+		try {
+			await api.deleteTasksBatch(tombstones);
+		} catch {
+			/* ignore */
 		}
 		clearTombstones();
 
