@@ -25,6 +25,9 @@ export interface RoomResponse {
 	room: Room;
 	member: Member;
 	token: string;
+	access_token?: string;
+	refresh_token?: string;
+	expires_in?: number;
 }
 
 export interface UserInfo {
@@ -97,9 +100,48 @@ export interface PomodoroStatus {
 	sessions_completed?: number;
 }
 
-// API helper
+// API helper with JWT auto-refresh
+
+let refreshPromise: Promise<boolean> | null = null;
+
+function getAccessToken(): string | null {
+	return localStorage.getItem('access_token') || localStorage.getItem('token');
+}
+
+async function tryRefresh(): Promise<boolean> {
+	const refreshToken = localStorage.getItem('refresh_token');
+	if (!refreshToken) return false;
+
+	if (refreshPromise) return refreshPromise;
+
+	refreshPromise = (async () => {
+		try {
+			const response = await fetch(`${API_BASE}/auth/refresh`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ refresh_token: refreshToken }),
+			});
+			if (!response.ok) return false;
+
+			const data = await response.json();
+			if (data.success) {
+				localStorage.setItem('access_token', data.data.access_token);
+				localStorage.setItem('refresh_token', data.data.refresh_token);
+				return true;
+			}
+			return false;
+		} catch {
+			return false;
+		} finally {
+			refreshPromise = null;
+		}
+	})();
+
+	return refreshPromise;
+}
+
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-	const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+	const token = typeof window !== 'undefined' ? getAccessToken() : null;
 
 	const headers: Record<string, string> = {
 		'Content-Type': 'application/json',
@@ -118,13 +160,12 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
 	const data = await response.json();
 
 	if (!response.ok) {
-		// Auth errors → force logout only if we had a token (session expired)
-		// For join/login flows, 401 is an expected error (wrong password etc.)
 		if (response.status === 401 && token) {
-			localStorage.removeItem('token');
-			localStorage.removeItem('room_name');
-			localStorage.removeItem('member');
-			localStorage.removeItem('room');
+			const refreshed = await tryRefresh();
+			if (refreshed) {
+				return apiRequest(endpoint, options);
+			}
+			clearAuth();
 			if (typeof window !== 'undefined') window.location.href = '/';
 		}
 		throw new Error(data.error || 'Request failed');
@@ -446,6 +487,27 @@ export const api = {
 	skipRest: async (): Promise<{ success: boolean }> => {
 		return apiRequest('/pomodoro/skip-rest', { method: 'POST' });
 	},
+
+	// JWT token management
+	refreshToken: async (
+		refreshToken: string
+	): Promise<{ success: boolean; data: { access_token: string; refresh_token: string; expires_in: number } }> => {
+		return apiRequest('/auth/refresh', {
+			method: 'POST',
+			body: JSON.stringify({ refresh_token: refreshToken }),
+		});
+	},
+
+	logout: async (refreshToken?: string): Promise<{ success: boolean }> => {
+		return apiRequest('/auth/logout', {
+			method: 'POST',
+			body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
+		});
+	},
+
+	logoutAll: async (): Promise<{ success: boolean; data: { revoked_count: number } }> => {
+		return apiRequest('/auth/tokens', { method: 'DELETE' });
+	},
 };
 
 // Store helpers
@@ -458,11 +520,15 @@ export function saveAuth(token: string, roomName: string, member: Member, room?:
 	}
 }
 
+export function saveJWT(accessToken: string, refreshToken: string) {
+	localStorage.setItem('access_token', accessToken);
+	localStorage.setItem('refresh_token', refreshToken);
+}
+
 export function clearAuth() {
-	localStorage.removeItem('token');
-	localStorage.removeItem('room_name');
-	localStorage.removeItem('member');
-	localStorage.removeItem('room');
+	['token', 'access_token', 'refresh_token', 'room_name', 'member', 'room'].forEach((k) =>
+		localStorage.removeItem(k)
+	);
 }
 
 export function getRoom(): Room | null {

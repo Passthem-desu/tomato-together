@@ -91,6 +91,9 @@ const translations: Record<Locale, Record<string, string>> = {
 		error_rate_limit: '操作过于频繁，请稍后再试',
 		kicked_from_room: '你已被房主移出房间',
 		token_expired: '令牌已过期，请重新加入房间',
+		invalid_refresh_token: '登录信息无效，请重新登录',
+		refresh_token_revoked: '会话已过期，请重新登录',
+		refresh_token_expired: '登录已过期，请重新登录',
 		room_settings_title: '房间设置',
 
 		room_readonly_banner: '此房间为只读模式，部分操作被禁用',
@@ -280,6 +283,9 @@ const translations: Record<Locale, Record<string, string>> = {
 		error_rate_limit: '操作過於頻繁，請稍後再試',
 		kicked_from_room: '你已被房主移出房間',
 		token_expired: '令牌已過期，請重新加入房間',
+		invalid_refresh_token: '登入資訊無效，請重新登入',
+		refresh_token_revoked: '工作階段已過期，請重新登入',
+		refresh_token_expired: '登入已過期，請重新登入',
 		room_settings_title: '房間設置',
 
 		room_readonly_banner: '此房間為唯讀模式，部分操作被禁用',
@@ -468,6 +474,9 @@ const translations: Record<Locale, Record<string, string>> = {
 		error_rate_limit: 'Too many requests, please try again later',
 		kicked_from_room: 'You have been removed from the room',
 		token_expired: 'Token expired, please rejoin the room',
+		invalid_refresh_token: 'Login session invalid, please login again',
+		refresh_token_revoked: 'Session expired, please login again',
+		refresh_token_expired: 'Login expired, please login again',
 		room_settings_title: 'Room Settings',
 
 		room_readonly_banner: 'This room is in read-only mode, some actions are disabled',
@@ -655,6 +664,9 @@ const translations: Record<Locale, Record<string, string>> = {
 		error_rate_limit: 'リクエストが多すぎます',
 		kicked_from_room: 'ルームから削除されました',
 		token_expired: 'トークンの有効期限が切れました',
+		invalid_refresh_token: 'ログイン情報が無効です。再度ログインしてください',
+		refresh_token_revoked: 'セッションの有効期限が切れました。再度ログインしてください',
+		refresh_token_expired: 'ログインの有効期限が切れました。再度ログインしてください',
 		room_settings_title: 'ルーム設定',
 
 		room_readonly_banner: 'このルームは読み取り専用モードです',
@@ -1166,6 +1178,9 @@ const errorMessages: Record<string, string> = {
 	field_too_long: 'error_field_too_long',
 	token_revoked: 'error_token_revoked',
 	rate_limit_exceeded: 'error_rate_limit',
+	invalid_refresh_token: 'invalid_refresh_token',
+	refresh_token_revoked: 'refresh_token_revoked',
+	refresh_token_expired: 'refresh_token_expired',
 };
 
 export function t(key: string, locale: Locale = 'zh-hans'): string {

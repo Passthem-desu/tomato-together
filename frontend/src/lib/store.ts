@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import type { Member, Room, UserInfo, PomodoroStatus } from './api';
-import { api, saveAuth, clearAuth } from './api';
+import { api, saveAuth, saveJWT, clearAuth } from './api';
 import { SSEClient, type TickData } from './sse/client';
 import { getErrorMessage, locale, t } from './i18n';
 
@@ -29,7 +29,7 @@ let sseUnsubscribers: (() => void)[] = [];
  * Must be called after joinRoom/createRoom when token is available.
  */
 export function connectSSE() {
-	const token = localStorage.getItem('token') || '';
+	const token = localStorage.getItem('access_token') || localStorage.getItem('token') || '';
 	const roomName = localStorage.getItem('room_name') || '';
 
 	if (!roomName) return;
@@ -252,8 +252,11 @@ export async function createRoom(
 			room_password: roomPassword,
 		});
 
-		const { room, member, token } = response.data;
+		const { room, member, token, access_token, refresh_token } = response.data;
 		saveAuth(token, room.name, member, room);
+		if (access_token && refresh_token) {
+			saveJWT(access_token, refresh_token);
+		}
 
 		currentRoom.set(room);
 		currentMember.set(member);
@@ -295,8 +298,11 @@ export async function joinRoom(
 			password,
 		});
 
-		const { room, member, token } = response.data;
+		const { room, member, token, access_token, refresh_token } = response.data;
 		saveAuth(token, room.name, member, room);
+		if (access_token && refresh_token) {
+			saveJWT(access_token, refresh_token);
+		}
 
 		currentRoom.set(room);
 		currentMember.set(member);

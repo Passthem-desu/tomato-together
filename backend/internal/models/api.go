@@ -9,9 +9,12 @@ type APIResponse struct {
 
 // RoomResponse is the response for room operations
 type RoomResponse struct {
-	Room   *RoomInfo   `json:"room"`
-	Member *MemberInfo `json:"member"`
-	Token  string      `json:"token"`
+	Room         *RoomInfo   `json:"room"`
+	Member       *MemberInfo `json:"member"`
+	Token        string      `json:"token"`
+	AccessToken  string      `json:"access_token,omitempty"`
+	RefreshToken string      `json:"refresh_token,omitempty"`
+	ExpiresIn    int64       `json:"expires_in,omitempty"`
 }
 
 // RoomInfo contains room information for responses

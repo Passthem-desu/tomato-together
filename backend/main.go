@@ -57,6 +57,13 @@ func main() {
 
 	repo := repository.New(db)
 	svc := service.New(repo)
+
+	// Log JWT status
+	if svc.JWTEnabled() {
+		log.Println("JWT authentication enabled (JWT_SECRET configured)")
+	} else {
+		log.Println("Warning: JWT_SECRET not set. Persistent user JWT tokens will not be generated.")
+	}
 	handler := api.New(svc)
 
 	hub := sse.NewHub(repo)

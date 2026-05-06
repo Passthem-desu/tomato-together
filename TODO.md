@@ -196,6 +196,62 @@
 
 ---
 
+## 🔐 JWT 认证体系重构
+
+> 详细设计见 `docs/JWT_AUTH_PLAN.md`（v1.1 — 已验证并修正）
+> **目标**：JWT access token + refresh token 双 token，多设备支持，自动续期
+> 
+> **验证状态**：已验证代码库 — `JWT_SECRET` 未读取、`go.mod` 无 JWT 依赖、`room_tokens` UNIQUE 约束存在、前端无任何 JWT 代码。所有 14 处差异已修正至 plan v1.1。
+
+### Phase A: 数据库 + 模型 + 环境变量
+- [ ] 新增 `refresh_tokens` 表（迁移 `000004_jwt_refresh_tokens.up.sql`）
+- [ ] 移除 `room_tokens` 的 `UNIQUE(member_id, room_id)` 约束（重建表，保留 token_hash）
+- [ ] 新增 `models/token.go`：`TokenInfo`（含 IsOwner/IsPersistent）`JWTClaims` `RefreshToken`
+- [ ] 更新 `.env.example` 添加 `JWT_SECRET` / `JWT_ACCESS_TOKEN_EXPIRY` / `JWT_REFRESH_TOKEN_EXPIRY`
+
+### Phase B: Repository 层
+- [ ] `CreateRefreshToken()` / `GetRefreshTokenByHash()` / `RevokeRefreshToken(tokenID)`
+- [ ] `RevokeAllRefreshTokens(memberID)` → revoke_count
+- [ ] `DeleteExpiredRefreshTokens()` 
+
+### Phase C: Service 层 — jwt.go（新文件）+ service.go 修改
+- [ ] `GenerateAccessToken(member)` → JWT string, expiry
+- [ ] `GenerateRefreshToken(memberID, deviceName)` → raw + *RefreshToken
+- [ ] `ValidateJWT(tokenString)` → *TokenInfo (stateless, no DB)
+- [ ] `RefreshAccessToken(refreshToken)` → new access + new refresh (rotation)
+- [ ] `RevokeRefreshToken(tokenValue)` / `RevokeAllRefreshTokens(memberID)`
+- [ ] **修改 `ValidateToken()`** 返回 `*models.TokenInfo`（JWT 优先，RoomToken 回退），填充 IsOwner/IsPersistent
+- [ ] 修改 CreateRoom/JoinRoom/Login 在 model.RoomResponse 中返回 JWT + refresh token
+- [ ] 新增 `ErrInvalidRefreshToken` / `ErrRefreshTokenRevoked` / `ErrRefreshTokenExpired`
+
+### Phase D: API Handler — Context 类型变更 + 新端点
+- [ ] **核心变更**：`GetTokenFromContext` 返回 `*models.TokenInfo`（所有 33 个调用方适配）
+- [ ] `authMiddleware` 使用 `*models.TokenInfo` 存 context
+- [ ] 新增 `POST /api/auth/refresh`（L1 路由，sensitiveRouter）
+- [ ] 新增 `POST /api/auth/logout`（L2 路由）
+- [ ] 新增 `DELETE /api/auth/tokens`（L2 路由）
+- [ ] SSE handler 支持 JWT 认证
+- [ ] main.go 读取 `JWT_SECRET` 并传给 Service
+
+### Phase E: 前端 JWT 改造
+- [ ] `api.ts`: 新增 `refreshToken()` / `logout()` / `logoutAll()` 方法
+- [ ] `api.ts`: JWT 自动刷新拦截器（401 → refresh → retry once）
+- [ ] `store.ts`: `saveAuth()` / `clearAuth()` 支持 access_token / refresh_token
+- [ ] `sse/client.ts`: 优先使用 access_token（JWT），回退 token（RoomToken）
+- [ ] i18n: 新增 `invalid_refresh_token` / `refresh_token_revoked` / `refresh_token_expired`
+
+### Phase F: 多设备番茄竞态修复
+- [ ] StartPomodoro / FollowPomodoro 包装为事务（SELECT → INSERT）
+- [ ] EndPomodoro / Pause / Resume 使用条件 UPDATE（WHERE ended_at IS NULL / paused_at IS NULL）
+- [ ] 受影响的 rows 为 0 时返回错误（检测到竞态）
+- [ ] 后端单元测试覆盖并发场景
+
+### Phase G: 番茄设置持久化（Phase H）
+- [ ] 番茄设置 localStorage 持久化，页面刷新后恢复
+- [ ] 默认值 25/5/15/4 不受影响
+
+---
+
 ## 📝 设计决策记录
 
 ### 已决定的设计（v2.0）
@@ -212,9 +268,9 @@
 | D-008 | 云同步 | WIP 和项目按房间隔离，通过 `member_id` 关联 |
 | D-009 | SSE tick 间隔 | 5 秒一次 |
 | D-010 | Heartbeat | SSE 客户端每 30 秒发送 ping，服务端 2 分钟无响应视为离线 |
-| D-011 | Token 格式 | RoomToken 使用 UUID v4，服务端生成 |
-| D-012 | Token 有效期 | 默认 24 小时 |
-| D-013 | 多设备支持 | 匿名用户：同一设备+同username=同会话；持久化用户：每设备独立 token |
+| D-011 | Token 格式 | **匿名用户**：RoomToken（UUID v4）；**持久化用户**：JWT access token (HS256, 1h) |
+| D-012 | Token 有效期 | RoomToken 24 小时；JWT access 1 小时；refresh token 30 天 |
+| D-013 | 多设备支持 | 持久化用户每设备独立 refresh token + room_token；匿名用户每设备独立 room_token |
 | D-014 | 密码加密 | bcrypt，工作因子 10 |
 | D-015 | 房主规则 | 房主必须是持久化用户；离开后 `is_owner` 标记保留 |
 
@@ -231,6 +287,12 @@
 | D-022 | **番茄状态机** | PomodoroSession 即状态机：ended_at IS NULL=活跃，paused_at=暂停，rest_duration>0=休息中 |
 | D-023 | 项目→标签 | 将“项目”重命名为“标签”，更符合轻量分类语义。SQLite 用 ALTER TABLE RENAME 安全迁移 |
 | D-024 | 短番茄不计入 | 持续不足 60 秒的番茄 session 不计入统计：duration 写为 0，统计查询过滤 `duration > 0` |
+| D-025 | JWT 签名算法 | HS256，密钥从 `JWT_SECRET` 环境变量读取 |
+| D-026 | Refresh token 存储 | opaque token 原文返回客户端，SHA-256 哈希存入 DB |
+| D-027 | Refresh token 轮换 | 每次使用 refresh token 换 access token 时，同时返回新的 refresh token，旧 token 作废 |
+| D-028 | 多设备 token 管理 | 每设备独立 refresh token + room_token；可单设备吊销或全设备吊销 |
+| D-029 | 认证优先级 | API 验证：JWT 优先 → RoomToken DB 回退；SSE：JWT 优先 → RoomToken 回退 |
+| D-030 | 向后兼容 | 匿名用户 RoomToken 机制不变；现有 API 响应增加新字段，客户端可忽略 |
 
 ### 历史设计决策（已废弃）
 
@@ -303,5 +365,5 @@ announcements (id, room_id, sender_id, title, body, created_at)
 ---
 
 *创建时间：2026-05-04*
-*最后更新：2026-05-05（安全加固 17 项 + 单元测试 20 pass + 短番茄 D-024 + 前端补全 8 项 + 待实现清单 Front #1~#9）*
+*最后更新：2026-05-06（JWT 认证计划 + D-025~D-030 设计决策）*
 *历史版本：v1.0（全局用户系统，已废弃）*

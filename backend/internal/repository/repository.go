@@ -726,6 +726,50 @@ func (r *Repository) GetTodayStats(roomID string, date time.Time) (int, int, int
 	return totalPomodoros, totalDuration, activeUsers, err
 }
 
+// RefreshToken operations
+
+func (r *Repository) CreateRefreshToken(token *models.RefreshToken) error {
+	query := `INSERT INTO refresh_tokens (id, member_id, token_hash, expires_at, device_name, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+	_, err := r.db.Exec(query, token.ID, token.MemberID, token.TokenHash, token.ExpiresAt, token.DeviceName, token.CreatedAt)
+	return err
+}
+
+func (r *Repository) GetRefreshTokenByHash(hash string) (*models.RefreshToken, error) {
+	query := `SELECT id, member_id, token_hash, expires_at, device_name, created_at, revoked_at FROM refresh_tokens WHERE token_hash = ?`
+	row := r.db.QueryRow(query, hash)
+	token := &models.RefreshToken{}
+	var revokedAt sql.NullTime
+	err := row.Scan(&token.ID, &token.MemberID, &token.TokenHash, &token.ExpiresAt, &token.DeviceName, &token.CreatedAt, &revokedAt)
+	if err != nil {
+		return nil, err
+	}
+	if revokedAt.Valid {
+		token.RevokedAt = &revokedAt.Time
+	}
+	return token, nil
+}
+
+func (r *Repository) RevokeRefreshToken(id string) error {
+	_, err := r.db.Exec(`UPDATE refresh_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`, time.Now(), id)
+	return err
+}
+
+func (r *Repository) RevokeAllRefreshTokens(memberID string) (int64, error) {
+	result, err := r.db.Exec(`UPDATE refresh_tokens SET revoked_at = ? WHERE member_id = ? AND revoked_at IS NULL`, time.Now(), memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (r *Repository) DeleteExpiredRefreshTokens() error {
+	_, err := r.db.Exec(`DELETE FROM refresh_tokens WHERE expires_at < ?`, time.Now())
+	if err != nil {
+		log.Printf("Warning: failed to delete expired refresh tokens: %v", err)
+	}
+	return err
+}
+
 // Helper function
 
 func boolToInt(b bool) int {

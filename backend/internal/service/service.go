@@ -56,11 +56,15 @@ var (
 )
 
 type Service struct {
-	repo *repository.Repository
+	repo   *repository.Repository
+	jwtCfg *jwtConfig
 }
 
 func New(repo *repository.Repository) *Service {
-	return &Service{repo: repo}
+	return &Service{
+		repo:   repo,
+		jwtCfg: loadJWTConfig(),
+	}
 }
 
 // Token expiry duration
@@ -161,6 +165,21 @@ func (s *Service) CreateRoom(req *models.CreateRoomRequest) (*models.RoomRespons
 		return nil, err
 	}
 
+	// Generate JWT if the user is persistent and JWT is configured
+	var accessToken, refreshToken string
+	var expiresIn int64
+	if member.IsPersistent && s.jwtCfg != nil {
+		at, _, err := s.GenerateAccessToken(member)
+		if err == nil {
+			accessToken = at
+			expiresIn = int64(s.jwtCfg.AccessExpiry.Seconds())
+		}
+		rt, _, err := s.GenerateRefreshToken(memberID, "")
+		if err == nil {
+			refreshToken = rt
+		}
+	}
+
 	return &models.RoomResponse{
 		Room: &models.RoomInfo{
 			ID:          room.ID,
@@ -174,7 +193,10 @@ func (s *Service) CreateRoom(req *models.CreateRoomRequest) (*models.RoomRespons
 			IsOwner:      member.IsOwner,
 			IsPersistent: member.IsPersistent,
 		},
-		Token: token.Token,
+		Token:        token.Token,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    expiresIn,
 	}, nil
 }
 
@@ -217,45 +239,40 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 			if req.Password == "" || !checkPassword(req.Password, existingMember.PasswordHash) {
 				return nil, ErrInvalidPassword
 			}
-			// Password correct - return existing user
-			tokenValue, err := generateToken()
-			if err != nil {
-				return nil, err
-			}
-			// Delete existing token and create new in transaction (Sec #17 fix)
-			token := &models.RoomToken{
-				ID:            uuid.New().String(),
-				MemberID:      existingMember.ID,
-				RoomID:        room.ID,
-				Token:         tokenValue,
-				CreatedAt:     time.Now(),
-				ExpiresAt:     time.Now().Add(tokenExpiry),
-				LastHeartbeat: time.Now(),
-			}
-			err = s.repo.RunInTx(func(tx *sql.Tx) error {
-				if err := s.repo.DeleteTokenByMemberAndRoomInTx(tx, existingMember.ID, room.ID); err != nil {
-					return err
-				}
-				return s.repo.CreateTokenInTx(tx, token)
-			})
-			if err != nil {
-				return nil, err
-			}
-			return &models.RoomResponse{
-				Room: &models.RoomInfo{
-					ID:          room.ID,
-					Name:        room.Name,
-					IsReadonly:  room.IsReadonly,
-					HasPassword: room.PasswordHash != "",
-				},
-				Member: &models.MemberInfo{
-					ID:           existingMember.ID,
-					Username:     existingMember.Username,
-					IsOwner:      existingMember.IsOwner,
-					IsPersistent: existingMember.IsPersistent,
-				},
-				Token: token.Token,
-			}, nil
+		// Password correct - create new token (multi-device: keep existing tokens)
+		tokenValue, err := generateToken()
+		if err != nil {
+			return nil, err
+		}
+		token := &models.RoomToken{
+			ID:            uuid.New().String(),
+			MemberID:      existingMember.ID,
+			RoomID:        room.ID,
+			Token:         tokenValue,
+			CreatedAt:     time.Now(),
+			ExpiresAt:     time.Now().Add(tokenExpiry),
+			LastHeartbeat: time.Now(),
+		}
+		if err := s.repo.CreateToken(token); err != nil {
+			return nil, err
+		}
+		resp := &models.RoomResponse{
+			Room: &models.RoomInfo{
+				ID:          room.ID,
+				Name:        room.Name,
+				IsReadonly:  room.IsReadonly,
+				HasPassword: room.PasswordHash != "",
+			},
+			Member: &models.MemberInfo{
+				ID:           existingMember.ID,
+				Username:     existingMember.Username,
+				IsOwner:      existingMember.IsOwner,
+				IsPersistent: existingMember.IsPersistent,
+			},
+			Token: token.Token,
+		}
+		s.addJWTToResponse(resp, existingMember)
+		return resp, nil
 		} else {
 			// Existing anonymous user - allow re-join and inherit data
 			if req.Password == "" {
@@ -328,21 +345,23 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 				if err != nil {
 					return nil, err
 				}
-				return &models.RoomResponse{
-					Room: &models.RoomInfo{
-						ID:          room.ID,
-						Name:        room.Name,
-						IsReadonly:  room.IsReadonly,
-						HasPassword: room.PasswordHash != "",
-					},
-					Member: &models.MemberInfo{
-						ID:           existingMember.ID,
-						Username:     existingMember.Username,
-						IsOwner:      existingMember.IsOwner,
-						IsPersistent: true,
-					},
-					Token: token.Token,
-				}, nil
+			resp := &models.RoomResponse{
+				Room: &models.RoomInfo{
+					ID:          room.ID,
+					Name:        room.Name,
+					IsReadonly:  room.IsReadonly,
+					HasPassword: room.PasswordHash != "",
+				},
+				Member: &models.MemberInfo{
+					ID:           existingMember.ID,
+					Username:     existingMember.Username,
+					IsOwner:      existingMember.IsOwner,
+					IsPersistent: true,
+				},
+				Token: token.Token,
+			}
+			s.addJWTToResponse(resp, existingMember)
+			return resp, nil
 			}
 		}
 	}
@@ -394,7 +413,7 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 		return nil, err
 	}
 
-	return &models.RoomResponse{
+	resp := &models.RoomResponse{
 		Room: &models.RoomInfo{
 			ID:          room.ID,
 			Name:        room.Name,
@@ -408,20 +427,26 @@ func (s *Service) JoinRoom(roomName string, req *models.JoinRoomRequest) (*model
 			IsPersistent: member.IsPersistent,
 		},
 		Token: token.Token,
-	}, nil
+	}
+	s.addJWTToResponse(resp, member)
+	return resp, nil
 }
 
 func (s *Service) LeaveRoom(tokenValue string) error {
-	token, err := s.ValidateToken(tokenValue)
+	tokenInfo, err := s.ValidateToken(tokenValue)
 	if err != nil {
 		return err
 	}
 
 	// End any active pomodoro session
-	s.repo.EndActiveSessionByMemberID(token.MemberID)
+	s.repo.EndActiveSessionByMemberID(tokenInfo.MemberID)
 
-	// Only delete token, member record is kept
-	return s.repo.DeleteToken(token.ID)
+	rt, err := s.repo.GetTokenByValue(tokenValue)
+	if err == nil {
+		s.repo.DeleteToken(rt.ID)
+	}
+
+	return nil
 }
 
 func (s *Service) GetRoomInfo(roomName string) (*models.Room, error) {
@@ -753,7 +778,7 @@ func (s *Service) Login(req *models.LoginRequest) (*models.RoomResponse, error) 
 		return nil, err
 	}
 
-	return &models.RoomResponse{
+	resp := &models.RoomResponse{
 		Room: &models.RoomInfo{
 			ID:          room.ID,
 			Name:        room.Name,
@@ -767,7 +792,9 @@ func (s *Service) Login(req *models.LoginRequest) (*models.RoomResponse, error) 
 			IsPersistent: member.IsPersistent,
 		},
 		Token: token.Token,
-	}, nil
+	}
+	s.addJWTToResponse(resp, member)
+	return resp, nil
 }
 
 // Pomodoro operations
@@ -821,10 +848,8 @@ func (s *Service) StartPomodoro(tokenValue string, req *models.StartPomodoroRequ
 		return nil, err
 	}
 
-	// Broadcast SSE event
 	go s.broadcastPomodoroStarted(token.RoomID, token.MemberID, session.ID, session.StartedAt)
 
-	// Count today's sessions
 	return &models.PomodoroStatusResponse{
 		Phase:                   "focusing",
 		SessionID:               session.ID,
@@ -1223,7 +1248,14 @@ func (s *Service) DeleteStatus(tokenValue string) error {
 
 // Token validation
 
-func (s *Service) ValidateToken(tokenValue string) (*models.RoomToken, error) {
+func (s *Service) ValidateToken(tokenValue string) (*models.TokenInfo, error) {
+	// 1. Try JWT parsing first (stateless, no DB query)
+	if tokenInfo, err := s.ValidateJWT(tokenValue); err == nil {
+		tokenInfo.Token = tokenValue
+		return tokenInfo, nil
+	}
+
+	// 2. JWT failed — fall back to RoomToken DB lookup
 	token, err := s.repo.GetTokenByValue(tokenValue)
 	if err != nil {
 		return nil, ErrTokenInvalid
@@ -1239,16 +1271,38 @@ func (s *Service) ValidateToken(tokenValue string) (*models.RoomToken, error) {
 		return nil, ErrTokenExpired
 	}
 
-	return token, nil
+	// Look up member to get username/is_owner/is_persistent
+	member, err := s.repo.GetMemberByID(token.MemberID)
+	if err != nil {
+		return nil, ErrTokenInvalid
+	}
+
+	return &models.TokenInfo{
+		MemberID:     token.MemberID,
+		RoomID:       token.RoomID,
+		Username:     member.Username,
+		IsOwner:      member.IsOwner,
+		IsPersistent: member.IsPersistent,
+		IsJWT:        false,
+		Token:        tokenValue,
+	}, nil
 }
 
 func (s *Service) RefreshToken(tokenValue string) error {
-	token, err := s.ValidateToken(tokenValue)
+	tokenInfo, err := s.ValidateToken(tokenValue)
 	if err != nil {
 		return err
 	}
-
-	return s.repo.UpdateTokenHeartbeat(token.ID)
+	// Refresh heartbeat via room_tokens table
+	// For JWT tokens, heartbeat is not needed (stateless), but we maintain backward compat
+	if !tokenInfo.IsJWT {
+		token, err := s.repo.GetTokenByValue(tokenValue)
+		if err != nil {
+			return err
+		}
+		return s.repo.UpdateTokenHeartbeat(token.ID)
+	}
+	return nil
 }
 
 // Tag operations
@@ -1425,6 +1479,21 @@ func (s *Service) DeleteAnnouncement(announcementID, memberID string) error {
 		}
 	}
 	return s.repo.DeleteAnnouncement(announcementID)
+}
+
+func (s *Service) addJWTToResponse(resp *models.RoomResponse, member *models.RoomMember) {
+	if member == nil || !member.IsPersistent || s.jwtCfg == nil {
+		return
+	}
+	at, _, err := s.GenerateAccessToken(member)
+	if err == nil {
+		resp.AccessToken = at
+		resp.ExpiresIn = int64(s.jwtCfg.AccessExpiry.Seconds())
+	}
+	rt, _, err := s.GenerateRefreshToken(member.ID, "")
+	if err == nil {
+		resp.RefreshToken = rt
+	}
 }
 
 // Helper functions

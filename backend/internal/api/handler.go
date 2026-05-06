@@ -44,6 +44,7 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	sensitiveRouter.HandleFunc("/rooms/{name}/check-user", h.CheckUser).Methods(http.MethodPost)
 	sensitiveRouter.HandleFunc("/rooms/{name}/check-password", h.CheckRoomPassword).Methods(http.MethodPost)
 	sensitiveRouter.HandleFunc("/auth/login", h.Login).Methods(http.MethodPost)
+	sensitiveRouter.HandleFunc("/auth/refresh", h.RefreshAccessToken).Methods(http.MethodPost)
 	sensitiveRouter.HandleFunc("/rooms", h.CreateRoom).Methods(http.MethodPost)
 
 	// L2 Routes (require token, with general rate limiting)
@@ -62,6 +63,8 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	authRouter.HandleFunc("/auth/me", h.GetMe).Methods(http.MethodGet)
 	authRouter.HandleFunc("/auth/upgrade", h.UpgradeToPersistent).Methods(http.MethodPost)
 	authRouter.HandleFunc("/auth/password", h.ChangePassword).Methods(http.MethodPut)
+	authRouter.HandleFunc("/auth/logout", h.Logout).Methods(http.MethodPost)
+	authRouter.HandleFunc("/auth/tokens", h.RevokeAllTokens).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/pomodoro/start", h.StartPomodoro).Methods(http.MethodPost)
 	authRouter.HandleFunc("/pomodoro/follow", h.FollowPomodoro).Methods(http.MethodPost)
 	authRouter.HandleFunc("/pomodoro/unfollow", h.UnfollowPomodoro).Methods(http.MethodPost)
@@ -98,27 +101,26 @@ func (h *Handler) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		token, err := h.svc.ValidateToken(tokenValue)
+		tokenInfo, err := h.svc.ValidateToken(tokenValue)
 		if err != nil {
 			h.writeError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
-		// Store token in context for later use
-		ctx := SetTokenContext(r.Context(), token)
+		ctx := SetTokenContext(r.Context(), tokenInfo)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 // Context helpers
 
-func SetTokenContext(ctx context.Context, token *models.RoomToken) context.Context {
+func SetTokenContext(ctx context.Context, token *models.TokenInfo) context.Context {
 	return context.WithValue(ctx, tokenContextKey, token)
 }
 
-func GetTokenFromContext(ctx context.Context) *models.RoomToken {
+func GetTokenFromContext(ctx context.Context) *models.TokenInfo {
 	if token := ctx.Value(tokenContextKey); token != nil {
-		return token.(*models.RoomToken)
+		return token.(*models.TokenInfo)
 	}
 	return nil
 }
@@ -579,6 +581,79 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		"data": map[string]string{
 			"message": "密码已更新",
 		},
+	})
+}
+
+func (h *Handler) RefreshAccessToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := h.parseJSON(r, &req); err != nil || req.RefreshToken == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	accessToken, refreshToken, expiresIn, err := h.svc.RefreshAccessToken(req.RefreshToken)
+	if err != nil {
+		switch err {
+		case service.ErrInvalidRefreshToken:
+			h.writeError(w, http.StatusUnauthorized, "invalid_refresh_token")
+		case service.ErrRefreshTokenRevoked:
+			h.writeError(w, http.StatusUnauthorized, "refresh_token_revoked")
+		case service.ErrRefreshTokenExpired:
+			h.writeError(w, http.StatusUnauthorized, "refresh_token_expired")
+		default:
+			h.writeError(w, http.StatusUnauthorized, "invalid_refresh_token")
+		}
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"access_token":  accessToken,
+			"refresh_token": refreshToken,
+			"expires_in":    expiresIn,
+		},
+	})
+}
+
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := h.parseJSON(r, &req); err == nil && req.RefreshToken != "" {
+		h.svc.RevokeRefreshTokenByValue(req.RefreshToken)
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    map[string]string{"message": "logged_out"},
+	})
+}
+
+func (h *Handler) RevokeAllTokens(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+
+	count, err := h.svc.RevokeAllRefreshTokens(token.MemberID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    map[string]interface{}{"revoked_count": count},
 	})
 }
 
@@ -1190,21 +1265,16 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	var isOwner, isAuth bool
 
 	if tokenValue != "" {
-		// Validate token
-		token, err := h.svc.ValidateToken(tokenValue)
-		if err == nil && token.RoomID == room.ID {
-			memberID = token.MemberID
+		// Validate token (supports JWT + RoomToken)
+		tokenInfo, err := h.svc.ValidateToken(tokenValue)
+		if err == nil && tokenInfo.RoomID == room.ID {
+			memberID = tokenInfo.MemberID
+			username = tokenInfo.Username
+			isOwner = tokenInfo.IsOwner
 			isAuth = true
 
-			// Get member info
-			member, err := h.svc.GetMe(tokenValue)
-			if err == nil {
-				username = member.Username
-				isOwner = member.IsOwner
-
-				// Update heartbeat
-				h.svc.RefreshToken(tokenValue)
-			}
+			// Update heartbeat
+			h.svc.RefreshToken(tokenValue)
 		} else if err != nil && tokenValue != "" {
 			// Token is invalid or expired - send token_expired and close
 			h.writeSSEEvent(w, "token_expired", map[string]interface{}{
