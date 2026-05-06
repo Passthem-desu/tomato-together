@@ -70,6 +70,7 @@ export interface Task {
 	created_at: string;
 	updated_at: string;
 	completed_at?: string;
+	sort_order?: number;
 }
 
 export interface Announcement {
@@ -420,6 +421,15 @@ export const api = {
 		return apiRequest(`/tasks/${id}`, { method: 'DELETE' });
 	},
 
+	deleteTasksBatch: async (
+		taskIds: string[]
+	): Promise<{ success: boolean; data?: { deleted: number } }> => {
+		return apiRequest('/tasks/batch', {
+			method: 'DELETE',
+			body: JSON.stringify({ task_ids: taskIds }),
+		});
+	},
+
 	syncTasks: async (
 		roomName: string,
 		tasks: Array<{
@@ -428,10 +438,16 @@ export const api = {
 			status: string;
 			tag_id?: string;
 			created_at: string;
+			updated_at: string;
+			sort_order?: number;
 		}>
 	): Promise<{
 		success: boolean;
-		data: { synced: number; tasks: Array<{ client_id: string; server_id: string }> };
+		data: {
+			synced: number;
+			tasks: Array<{ client_id: string; server_id: string }>;
+			conflicts?: Array<{ client_id: string; server_id: string; server_task: Task }>;
+		};
 	}> => {
 		return apiRequest('/tasks/sync', {
 			method: 'POST',

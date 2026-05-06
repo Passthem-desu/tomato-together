@@ -410,6 +410,24 @@ func (r *Repository) DeleteTask(taskID string) error {
 	return err
 }
 
+func (r *Repository) GetTaskByClientIDAndMember(clientID, memberID string) (*models.Task, error) {
+	query := `SELECT id, client_id, member_id, room_id, tag_id, title, status, sort_order, created_at, updated_at, completed_at FROM tasks WHERE client_id = ? AND member_id = ?`
+	return r.scanTask(query, clientID, memberID)
+}
+
+func (r *Repository) UpdateTaskWithSort(taskID string, title, status, tagID string, sortOrder int, completedAt *time.Time) error {
+	query := `UPDATE tasks SET title = COALESCE(NULLIF(?, ''), title), status = COALESCE(NULLIF(?, ''), status), tag_id = ?, sort_order = ?, updated_at = ?`
+	args := []interface{}{title, status, tagID, sortOrder, time.Now()}
+	if completedAt != nil {
+		query += `, completed_at = ?`
+		args = append(args, *completedAt)
+	}
+	query += ` WHERE id = ?`
+	args = append(args, taskID)
+	_, err := r.db.Exec(query, args...)
+	return err
+}
+
 func (r *Repository) scanTask(query string, args ...interface{}) (*models.Task, error) {
 	row := r.db.QueryRow(query, args...)
 	task := &models.Task{}
@@ -469,6 +487,12 @@ func (r *Repository) GetActiveSessionByMemberID(memberID string) (*models.Pomodo
 	return r.scanPomodoroSession(row)
 }
 
+func (r *Repository) GetActiveSessionByMemberIDInTx(tx *sql.Tx, memberID string) (*models.PomodoroSession, error) {
+	query := `SELECT id, member_id, room_id, tag_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? AND ended_at IS NULL`
+	row := tx.QueryRow(query, memberID)
+	return r.scanPomodoroSession(row)
+}
+
 // EndActiveSessionByMemberID ends any active pomodoro session for a member
 func (r *Repository) EndActiveSessionByMemberID(memberID string) error {
 	now := time.Now()
@@ -516,10 +540,66 @@ func (r *Repository) EndSessionWithRest(sessionID string, endedAt *time.Time, du
 	return nil
 }
 
+func (r *Repository) EndSessionWithRestInTx(tx *sql.Tx, sessionID string, endedAt *time.Time, duration int, restDuration int, isLongBreak bool) error {
+	query := `UPDATE pomodoro_sessions SET ended_at = ?, duration = ?, rest_duration = ?, is_long_break = ? WHERE id = ? AND ended_at IS NULL`
+	result, err := tx.Exec(query, endedAt, duration, restDuration, boolToInt(isLongBreak), sessionID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrSessionNotActive
+	}
+	return nil
+}
+
+// CreatePomodoroSessionInTx creates a pomodoro session within a transaction
+func (r *Repository) CreatePomodoroSessionInTx(tx *sql.Tx, session *models.PomodoroSession) error {
+	query := `INSERT INTO pomodoro_sessions (id, member_id, room_id, tag_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := tx.Exec(query, session.ID, session.MemberID, session.RoomID, session.TagID, session.TaskID, session.Duration, session.PlannedDuration, boolToInt(session.IsFollowed), session.LeaderID, session.StartedAt, session.EndedAt, session.PausedAt, session.RestDuration, boolToInt(session.IsLongBreak), session.PlannedRestDuration, session.PlannedLongBreakDuration, session.SessionsBeforeLongBreak, session.SessionIndex)
+	return err
+}
+
+// UpdatePomodoroSessionInTx updates a pomodoro session within a transaction
+func (r *Repository) UpdatePomodoroSessionInTx(tx *sql.Tx, sessionID string, endedAt *time.Time, duration int) error {
+	query := `UPDATE pomodoro_sessions SET ended_at = ?, duration = ? WHERE id = ? AND ended_at IS NULL`
+	result, err := tx.Exec(query, endedAt, duration, sessionID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrSessionNotActive
+	}
+	return nil
+}
+
 // PauseSession marks an active session as paused
 func (r *Repository) PauseSession(sessionID string) error {
 	query := `UPDATE pomodoro_sessions SET paused_at = ?, rest_duration = 0 WHERE id = ? AND ended_at IS NULL AND paused_at IS NULL`
 	result, err := r.db.Exec(query, time.Now(), sessionID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrSessionNotActive
+	}
+	return nil
+}
+
+func (r *Repository) PauseSessionInTx(tx *sql.Tx, sessionID string) error {
+	query := `UPDATE pomodoro_sessions SET paused_at = ?, rest_duration = 0 WHERE id = ? AND ended_at IS NULL AND paused_at IS NULL`
+	result, err := tx.Exec(query, time.Now(), sessionID)
 	if err != nil {
 		return err
 	}
@@ -551,10 +631,32 @@ func (r *Repository) ResumeSession(sessionID string, pausedMillis int) error {
 	return nil
 }
 
+func (r *Repository) ResumeSessionInTx(tx *sql.Tx, sessionID string, pausedMillis int) error {
+	query := `UPDATE pomodoro_sessions SET paused_at = NULL, started_at = datetime(started_at, '+' || ? || ' seconds') WHERE id = ? AND ended_at IS NULL AND paused_at IS NOT NULL`
+	result, err := tx.Exec(query, float64(pausedMillis)/1000.0, sessionID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrSessionNotActive
+	}
+	return nil
+}
+
 // GetLatestSessionByMemberID returns the most recent session (active or completed)
 func (r *Repository) GetLatestSessionByMemberID(memberID string) (*models.PomodoroSession, error) {
 	query := `SELECT id, member_id, room_id, tag_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? ORDER BY started_at DESC LIMIT 1`
 	row := r.db.QueryRow(query, memberID)
+	return r.scanPomodoroSession(row)
+}
+
+func (r *Repository) GetLatestSessionByMemberIDInTx(tx *sql.Tx, memberID string) (*models.PomodoroSession, error) {
+	query := `SELECT id, member_id, room_id, tag_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index FROM pomodoro_sessions WHERE member_id = ? ORDER BY started_at DESC LIMIT 1`
+	row := tx.QueryRow(query, memberID)
 	return r.scanPomodoroSession(row)
 }
 

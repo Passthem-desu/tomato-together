@@ -217,18 +217,30 @@ type SyncTaskItem struct {
 	Status    string `json:"status"`
 	TagID     string `json:"tag_id,omitempty"`
 	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+	SortOrder int    `json:"sort_order,omitempty"`
 }
 
 // SyncTasksResponse is the response for syncing tasks
 type SyncTasksResponse struct {
-	Synced int              `json:"synced"`
-	Tasks  []SyncTaskResult `json:"tasks"`
+	Synced    int              `json:"synced"`
+	Tasks     []SyncTaskResult `json:"tasks"`
+	Conflicts []ConflictItem   `json:"conflicts,omitempty"`
 }
 
 // SyncTaskResult represents the result of syncing a task
 type SyncTaskResult struct {
 	ClientID string `json:"client_id"`
 	ServerID string `json:"server_id"`
+}
+
+// ConflictItem represents a sync conflict where server data is newer
+type ConflictItem struct {
+	ClientID        string `json:"client_id"`
+	ServerTitle     string `json:"server_title"`
+	ServerStatus    string `json:"server_status"`
+	ServerUpdatedAt string `json:"server_updated_at"`
+	ClientUpdatedAt string `json:"client_updated_at"`
 }
 
 // StatsResponse is the response for stats

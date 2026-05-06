@@ -12,6 +12,7 @@ export interface LocalTask {
 	created_at: string;
 	updated_at: string;
 	server_id?: string;
+	sort_order?: number;
 }
 
 function load(): LocalTask[] {
@@ -91,30 +92,37 @@ export const taskStore = {
 	async syncWithServer(roomName: string): Promise<LocalTask[]> {
 		const local = load();
 
-		// 1. Push unsynced local tasks
 		const unsynced = local.filter((t) => !t.server_id);
 		if (unsynced.length > 0) {
 			try {
 				const resp = await api.syncTasks(
 					roomName,
-					unsynced.map((t) => ({
+					unsynced.map((t, index) => ({
 						client_id: t.client_id,
 						title: t.title,
 						status: t.status,
 						tag_id: t.tag_id || '',
 						created_at: t.created_at,
+						updated_at: t.updated_at,
+						sort_order: index,
 					}))
 				);
 				for (const r of resp.data.tasks) {
 					const lt = local.find((t) => t.client_id === r.client_id);
 					if (lt) lt.server_id = r.server_id;
 				}
+				if (resp.data.conflicts) {
+					for (const c of resp.data.conflicts) {
+						console.warn(
+							`Sync conflict for client_id ${c.client_id}: server has newer version, keeping local`
+						);
+					}
+				}
 			} catch {
 				/* offline */
 			}
 		}
 
-		// 2. Delete server tasks removed locally
 		const tombstones = getTombstones();
 		for (const sid of tombstones) {
 			try {
@@ -125,14 +133,15 @@ export const taskStore = {
 		}
 		clearTombstones();
 
-		// 3. Pull server tasks and merge
 		try {
 			const resp = await api.getTasks();
 			const serverTasks: Task[] = resp.data?.tasks || [];
+
 			for (const st of serverTasks) {
-				const existing = local.find(
-					(t) => t.client_id === st.client_id || t.server_id === st.id
-				);
+				const clientMatch = local.find((t) => t.client_id === st.client_id);
+				const serverMatch = local.find((t) => t.server_id === st.id);
+				const existing = clientMatch || serverMatch;
+
 				if (!existing) {
 					local.push({
 						client_id: st.client_id || crypto.randomUUID(),
@@ -142,16 +151,28 @@ export const taskStore = {
 						tag_id: st.tag_id || undefined,
 						created_at: st.created_at,
 						updated_at: st.updated_at,
+						sort_order: st.sort_order ?? undefined,
 					});
 				} else {
 					if (!existing.server_id) existing.server_id = st.id;
-					existing.status = st.status as LocalTask['status'];
-					existing.tag_id = st.tag_id || undefined;
+
+					const serverTime = new Date(st.updated_at).getTime();
+					const localTime = new Date(existing.updated_at).getTime();
+
+					if (serverTime > localTime) {
+						existing.title = st.title;
+						existing.status = st.status as LocalTask['status'];
+						existing.tag_id = st.tag_id || undefined;
+						existing.updated_at = st.updated_at;
+						existing.sort_order = st.sort_order ?? existing.sort_order;
+					}
 				}
 			}
 		} catch {
 			/* offline */
 		}
+
+		local.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 
 		save(local);
 		return local;

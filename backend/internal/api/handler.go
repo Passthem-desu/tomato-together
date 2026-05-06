@@ -84,6 +84,7 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	authRouter.HandleFunc("/tasks/{id}", h.UpdateTask).Methods(http.MethodPut)
 	authRouter.HandleFunc("/tasks/{id}", h.DeleteTask).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/tasks/sync", h.SyncTasks).Methods(http.MethodPost)
+	authRouter.HandleFunc("/tasks/batch", h.DeleteTasksBatch).Methods(http.MethodDelete)
 	authRouter.HandleFunc("/stats/me", h.GetMyStats).Methods(http.MethodGet)
 	authRouter.HandleFunc("/stats/me", h.ResetMyStats).Methods(http.MethodDelete)
 }
@@ -1095,6 +1096,36 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"data": map[string]string{
 			"message": "WIP 已删除",
+		},
+	})
+}
+
+func (h *Handler) DeleteTasksBatch(w http.ResponseWriter, r *http.Request) {
+	token := GetTokenFromContext(r.Context())
+	if token == nil {
+		h.writeError(w, http.StatusUnauthorized, "token_invalid")
+		return
+	}
+
+	var body struct {
+		TaskIDs []string `json:"task_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.TaskIDs) == 0 {
+		h.writeError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	deleted := 0
+	for _, taskID := range body.TaskIDs {
+		if err := h.svc.DeleteTask(taskID, token.MemberID); err == nil {
+			deleted++
+		}
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]int{
+			"deleted": deleted,
 		},
 	})
 }
