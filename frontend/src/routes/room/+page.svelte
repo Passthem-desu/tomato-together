@@ -19,6 +19,7 @@
 	} from '$lib/store';
 	import { api } from '$lib/api';
 	import { locale, t } from '$lib/i18n';
+	import { taskStore } from '$lib/taskStore';
 	import { PomodoroCountdown } from '$lib/countdown';
 	import { SoundManager } from '$lib/sounds';
 	import RoomHeader from '$lib/components/RoomHeader.svelte';
@@ -41,6 +42,8 @@
 	let showSettings = $state(false);
 	let notifyEnabled = $state(loadNotifyPref());
 	let soundVersion = $state(0);
+	let lastTaskSync = 0;
+	const TASK_SYNC_COOLDOWN = 30_000;
 
 	function handleNotifyChange(v: boolean) {
 		notifyEnabled = v;
@@ -60,13 +63,6 @@
 		}));
 	});
 
-	// When idle, force displayTime BEFORE render (prevent tick artifacts)
-	$effect.pre(() => {
-		if ($pomodoroStatus.phase === 'idle') {
-			displayTime = plannedMinutes * 60;
-		}
-	});
-
 	let estimatedFinish = $derived(computeEstimate());
 
 	function computeEstimate(): string {
@@ -78,6 +74,21 @@
 		const finish = new Date(Date.now() + totalSec * 1000);
 		return finish.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 	}
+
+	// Single source of truth: sync countdown from pomodoroStatus
+	$effect(() => {
+		const s = $pomodoroStatus;
+		if (s.phase === 'idle') {
+			countdown.syncFromServer(0);
+			displayTime = plannedMinutes * 60;
+		} else if (s.phase === 'paused') {
+			countdown.halt();
+			if (s.remaining_seconds !== undefined) displayTime = s.remaining_seconds;
+		} else if (s.remaining_seconds !== undefined) {
+			countdown.syncFromServer(s.remaining_seconds);
+			displayTime = s.remaining_seconds;
+		}
+	});
 
 	// ── Countdown events ──
 	const unsubs: (() => void)[] = [];
@@ -104,7 +115,6 @@
 				}
 				sound.play('focus_end');
 				notifyPomodoroEnd();
-				countdown.start(restSec);
 			} else if (phase === 'rest') {
 				sound.play('rest_end');
 				notifyRestEnd();
@@ -113,12 +123,11 @@
 					try {
 						await startNextFocus();
 					} catch {
-						countdown.start(plannedMinutes * 60);
+						/* offline */
 					}
 				} else {
 					sessionIndex = 0;
 					pomodoroStatus.set({ phase: 'idle' });
-					displayTime = plannedMinutes * 60;
 					sound.play('all_done');
 					notifyAllDone();
 				}
@@ -134,17 +143,8 @@
 			sessions_before_long_break: sessionsBeforeLong,
 			session_index: sessionIndex,
 		});
-		countdown.start(plannedMinutes * 60);
+		// $effect syncs countdown from pomodoroStatus automatically
 	}
-
-	// ── Drift correction ──
-	$effect(() => {
-		const sec = $pomodoroStatus.remaining_seconds;
-		const phase = $pomodoroStatus.phase;
-		if (sec !== undefined && countdown.getState() === 'running' && phase !== 'rest') {
-			if (Math.abs(countdown.getRemaining() - sec) > 3) countdown.setRemaining(sec);
-		}
-	});
 
 	// ── Persist settings to localStorage ──
 	$effect(() => {
@@ -167,8 +167,14 @@
 		restorePomodoroState();
 
 		const handleVisibility = () => {
-			if (document.visibilityState === 'visible' && $pomodoroStatus.phase !== 'idle')
-				restorePomodoroState();
+			if (document.visibilityState === 'visible') {
+				if ($pomodoroStatus.phase !== 'idle') restorePomodoroState();
+				const now = Date.now();
+				if (now - lastTaskSync > TASK_SYNC_COOLDOWN) {
+					lastTaskSync = now;
+					taskStore.syncWithServer($currentRoom?.name || '');
+				}
+			}
 		};
 		document.addEventListener('visibilitychange', handleVisibility);
 		unsubs.push(() => document.removeEventListener('visibilitychange', handleVisibility));
@@ -189,57 +195,39 @@
 	async function handlePause() {
 		sound.play('focus_pause');
 		const resp = await api.pausePomodoro();
-		if (resp.data) {
-			pomodoroStatus.set(resp.data);
-			countdown.pause();
-			countdown.setRemaining(resp.data.remaining_seconds ?? displayTime);
-		}
+		if (resp.data) pomodoroStatus.set(resp.data);
 	}
 
 	async function handleResume() {
 		sound.play('focus_resume');
 		const resp = await api.resumePomodoro();
-		if (resp.data) {
-			pomodoroStatus.set(resp.data);
-			countdown.setRemaining(resp.data.remaining_seconds ?? displayTime);
-			countdown.resume();
-		}
+		if (resp.data) pomodoroStatus.set(resp.data);
 	}
 
 	async function handleSkip() {
-		countdown.stop();
 		sound.play('rest_end');
 		notifyRestEnd();
 		await api.skipRest();
+		pomodoroStatus.set({ phase: 'idle' });
 		if (sessionIndex < totalSessions) {
 			sessionIndex++;
-			startNextFocus();
+			await startNextFocus();
 		} else {
 			sessionIndex = 0;
-			pomodoroStatus.set({ phase: 'idle' });
-			displayTime = plannedMinutes * 60;
 			sound.play('all_done');
 			notifyAllDone();
 		}
 	}
 
 	async function handleStop() {
-		countdown.stop();
 		sound.play('focus_end');
 		await endPomodoro(true);
-		countdown.stop();
 		sessionIndex = 0;
-		displayTime = plannedMinutes * 60;
 	}
 
 	async function handleEnd() {
 		sound.play('focus_end');
 		await endPomodoro(false, sessionIndex);
-		const restSec =
-			$pomodoroStatus.remaining_seconds || $pomodoroStatus.rest_duration || restMinutes * 60;
-		countdown.stop();
-		countdown.start(restSec);
-		displayTime = restSec;
 		notifyPomodoroEnd();
 	}
 
@@ -263,14 +251,6 @@
 					resp.data.sessions_completed > 0
 				) {
 					sessionIndex = resp.data.sessions_completed;
-				}
-				if (resp.data.remaining_seconds !== undefined) {
-					if (resp.data.phase === 'paused') {
-						countdown.start(resp.data.remaining_seconds);
-						countdown.pause();
-					} else if (resp.data.phase !== 'idle') {
-						countdown.start(resp.data.remaining_seconds);
-					}
 				}
 			}
 		} catch {
