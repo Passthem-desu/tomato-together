@@ -182,16 +182,15 @@ export const taskStore = {
 					}
 				}
 			}
+			// Remove local tasks that have a server_id but are no longer on server (deleted by another device)
+			const serverIds = new Set(serverTasks.map((t) => t.id));
+			const toRemove = local.filter((t) => t.server_id && !serverIds.has(t.server_id));
+			for (const t of toRemove) {
+				const idx = local.indexOf(t);
+				if (idx !== -1) local.splice(idx, 1);
+			}
 		} catch {
 			/* offline */
-		}
-
-		// Remove local tasks that have a server_id but are no longer on server (deleted by another device)
-		const serverIds = new Set(serverTasks.map((t) => t.id));
-		const toRemove = local.filter((t) => t.server_id && !serverIds.has(t.server_id));
-		for (const t of toRemove) {
-			const idx = local.indexOf(t);
-			if (idx !== -1) local.splice(idx, 1);
 		}
 
 		// Mark all remaining tasks as synced after pull
