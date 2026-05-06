@@ -260,7 +260,8 @@
 				pomodoroStatus.set(resp.data);
 				if (resp.data.remaining_seconds !== undefined) {
 					if (resp.data.phase === 'paused') {
-						countdown.setRemaining(resp.data.remaining_seconds);
+						countdown.start(resp.data.remaining_seconds);
+						countdown.pause();
 					} else if (resp.data.phase !== 'idle') {
 						countdown.start(resp.data.remaining_seconds);
 					}

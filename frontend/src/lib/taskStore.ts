@@ -92,7 +92,7 @@ export const taskStore = {
 	async syncWithServer(roomName: string): Promise<LocalTask[]> {
 		const local = load();
 
-		const unsynced = local.filter((t) => !t.server_id);
+		const unsynced = local;
 		if (unsynced.length > 0) {
 			try {
 				const resp = await api.syncTasks(
@@ -124,12 +124,14 @@ export const taskStore = {
 		}
 
 		const tombstones = getTombstones();
-		try {
-			await api.deleteTasksBatch(tombstones);
-		} catch {
-			/* ignore */
+		if (tombstones.length > 0) {
+			try {
+				await api.deleteTasksBatch(tombstones);
+				clearTombstones();
+			} catch {}
+		} else {
+			clearTombstones();
 		}
-		clearTombstones();
 
 		try {
 			const resp = await api.getTasks();

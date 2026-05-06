@@ -82,7 +82,11 @@ export function connectSSE() {
 	});
 
 	// Handle phase changes (pause/resume/skip)
-	const unsubPhase = sseClient.on('phase_changed', () => {
+	const unsubPhase = sseClient.on('phase_changed', (data: any) => {
+		const currentId = get(currentMember)?.id;
+		if (data.user_id === currentId) {
+			pomodoroStatus.update((prev) => ({ ...prev, phase: data.phase }));
+		}
 		refreshRoomUsers();
 	});
 
@@ -150,6 +154,7 @@ function handleTick(data: TickData) {
 			pomodoroStatus.update((prev) => ({
 				...prev,
 				remaining_seconds: tickUser.remaining_seconds,
+				phase: tickUser.phase || prev.phase,
 			}));
 		}
 	}

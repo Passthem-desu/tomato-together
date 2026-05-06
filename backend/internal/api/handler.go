@@ -1110,7 +1110,7 @@ func (h *Handler) DeleteTasksBatch(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		TaskIDs []string `json:"task_ids"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.TaskIDs) == 0 {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
