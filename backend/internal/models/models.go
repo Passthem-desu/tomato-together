@@ -53,6 +53,7 @@ type Task struct {
 	TagID       string     `json:"tag_id"`
 	Title       string     `json:"title"`
 	Status      string     `json:"status"`
+	SortOrder   int        `json:"sort_order"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	CompletedAt *time.Time `json:"completed_at"`

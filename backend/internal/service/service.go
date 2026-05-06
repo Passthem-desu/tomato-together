@@ -944,6 +944,9 @@ func (s *Service) UnfollowPomodoro(tokenValue string, req *models.FollowRoomRequ
 		duration = 0 // Don't count sessions stopped within 1 minute
 	}
 	if err := s.repo.UpdatePomodoroSession(session.ID, &now, duration); err != nil {
+		if errors.Is(err, repository.ErrSessionNotActive) {
+			return "idle", nil
+		}
 		return "", err
 	}
 
@@ -999,6 +1002,9 @@ func (s *Service) EndPomodoro(tokenValue string, req *models.EndPomodoroRequest)
 			recordedDuration = 0
 		}
 		if err := s.repo.UpdatePomodoroSession(session.ID, &now, recordedDuration); err != nil {
+			if errors.Is(err, repository.ErrSessionNotActive) {
+				return nil, ErrNoActiveSession
+			}
 			return nil, err
 		}
 		go s.broadcastPomodoroEnded(token.RoomID, token.MemberID, session.ID, recordedDuration, "aborted")
@@ -1017,6 +1023,9 @@ func (s *Service) EndPomodoro(tokenValue string, req *models.EndPomodoroRequest)
 		actualRest = longBreakDuration
 	}
 	if err := s.repo.EndSessionWithRest(session.ID, &now, duration, actualRest, shouldTakeLongBreak); err != nil {
+		if errors.Is(err, repository.ErrSessionNotActive) {
+			return nil, ErrNoActiveSession
+		}
 		return nil, err
 	}
 
@@ -1124,6 +1133,9 @@ func (s *Service) PausePomodoro(tokenValue string) (*models.PomodoroStatusRespon
 	}
 
 	if err := s.repo.PauseSession(session.ID); err != nil {
+		if errors.Is(err, repository.ErrSessionNotActive) {
+			return nil, ErrNoActiveSession
+		}
 		return nil, err
 	}
 
@@ -1147,6 +1159,9 @@ func (s *Service) ResumePomodoro(tokenValue string) (*models.PomodoroStatusRespo
 
 	pausedMillis := int(time.Since(*session.PausedAt).Milliseconds())
 	if err := s.repo.ResumeSession(session.ID, pausedMillis); err != nil {
+		if errors.Is(err, repository.ErrSessionNotActive) {
+			return nil, ErrNoActiveSession
+		}
 		return nil, err
 	}
 
@@ -1188,6 +1203,9 @@ func (s *Service) SkipRest(tokenValue string) error {
 
 	err = s.repo.EndSessionWithRest(latest.ID, &now, duration, 0, false)
 	if err != nil {
+		if errors.Is(err, repository.ErrSessionNotActive) {
+			return ErrNoActiveSession
+		}
 		return err
 	}
 	go s.broadcastPhaseChanged(token.RoomID, token.MemberID, "idle")

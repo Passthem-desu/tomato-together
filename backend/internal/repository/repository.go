@@ -4,11 +4,14 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"log"
 	"time"
 
 	"tomatogether/backend/internal/models"
 )
+
+var ErrSessionNotActive = errors.New("session_not_active")
 
 type Repository struct {
 	db *sql.DB
@@ -361,23 +364,30 @@ func (r *Repository) scanTags(query string, args ...interface{}) ([]*models.Tag,
 // Task operations
 
 func (r *Repository) CreateTask(task *models.Task) error {
-	query := `INSERT INTO tasks (id, client_id, member_id, room_id, tag_id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err := r.db.Exec(query, task.ID, task.ClientID, task.MemberID, task.RoomID, task.TagID, task.Title, task.Status, task.CreatedAt, task.UpdatedAt)
+	var maxSort int
+	err := r.db.QueryRow(`SELECT COALESCE(MAX(sort_order), -1) FROM tasks WHERE member_id = ? AND room_id = ?`, task.MemberID, task.RoomID).Scan(&maxSort)
+	if err != nil {
+		return err
+	}
+	task.SortOrder = maxSort + 1
+	query := `INSERT INTO tasks (id, client_id, member_id, room_id, tag_id, title, status, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err = r.db.Exec(query, task.ID, task.ClientID, task.MemberID, task.RoomID, task.TagID, task.Title, task.Status, task.SortOrder, task.CreatedAt, task.UpdatedAt)
 	return err
 }
 
 func (r *Repository) GetTaskByID(id string) (*models.Task, error) {
-	query := `SELECT id, client_id, member_id, room_id, tag_id, title, status, created_at, updated_at, completed_at FROM tasks WHERE id = ?`
+	query := `SELECT id, client_id, member_id, room_id, tag_id, title, status, sort_order, created_at, updated_at, completed_at FROM tasks WHERE id = ?`
 	return r.scanTask(query, id)
 }
 
 func (r *Repository) GetTasksByMemberAndRoom(memberID, roomID string, status string) ([]*models.Task, error) {
-	query := `SELECT id, client_id, member_id, room_id, tag_id, title, status, created_at, updated_at, completed_at FROM tasks WHERE member_id = ? AND room_id = ?`
+	query := `SELECT id, client_id, member_id, room_id, tag_id, title, status, sort_order, created_at, updated_at, completed_at FROM tasks WHERE member_id = ? AND room_id = ?`
 	args := []interface{}{memberID, roomID}
 	if status != "" {
 		query += ` AND status = ?`
 		args = append(args, status)
 	}
+	query += ` ORDER BY sort_order ASC, created_at ASC`
 	return r.scanTasks(query, args...)
 }
 
@@ -405,7 +415,7 @@ func (r *Repository) scanTask(query string, args ...interface{}) (*models.Task, 
 	task := &models.Task{}
 	var tagID sql.NullString
 	var completedAt sql.NullTime
-	err := row.Scan(&task.ID, &task.ClientID, &task.MemberID, &task.RoomID, &tagID, &task.Title, &task.Status, &task.CreatedAt, &task.UpdatedAt, &completedAt)
+	err := row.Scan(&task.ID, &task.ClientID, &task.MemberID, &task.RoomID, &tagID, &task.Title, &task.Status, &task.SortOrder, &task.CreatedAt, &task.UpdatedAt, &completedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +440,7 @@ func (r *Repository) scanTasks(query string, args ...interface{}) ([]*models.Tas
 		task := &models.Task{}
 		var tagID sql.NullString
 		var completedAt sql.NullTime
-		err := rows.Scan(&task.ID, &task.ClientID, &task.MemberID, &task.RoomID, &tagID, &task.Title, &task.Status, &task.CreatedAt, &task.UpdatedAt, &completedAt)
+		err := rows.Scan(&task.ID, &task.ClientID, &task.MemberID, &task.RoomID, &tagID, &task.Title, &task.Status, &task.SortOrder, &task.CreatedAt, &task.UpdatedAt, &completedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -474,32 +484,71 @@ func (r *Repository) EndActiveSessionByMemberID(memberID string) error {
 }
 
 func (r *Repository) UpdatePomodoroSession(sessionID string, endedAt *time.Time, duration int) error {
-	query := `UPDATE pomodoro_sessions SET ended_at = ?, duration = ? WHERE id = ?`
-	_, err := r.db.Exec(query, endedAt, duration, sessionID)
-	return err
+	query := `UPDATE pomodoro_sessions SET ended_at = ?, duration = ? WHERE id = ? AND ended_at IS NULL`
+	result, err := r.db.Exec(query, endedAt, duration, sessionID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrSessionNotActive
+	}
+	return nil
 }
 
 // EndSessionWithRest ends a session and sets rest info
 func (r *Repository) EndSessionWithRest(sessionID string, endedAt *time.Time, duration int, restDuration int, isLongBreak bool) error {
-	query := `UPDATE pomodoro_sessions SET ended_at = ?, duration = ?, rest_duration = ?, is_long_break = ? WHERE id = ?`
-	_, err := r.db.Exec(query, endedAt, duration, restDuration, boolToInt(isLongBreak), sessionID)
-	return err
+	query := `UPDATE pomodoro_sessions SET ended_at = ?, duration = ?, rest_duration = ?, is_long_break = ? WHERE id = ? AND ended_at IS NULL`
+	result, err := r.db.Exec(query, endedAt, duration, restDuration, boolToInt(isLongBreak), sessionID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrSessionNotActive
+	}
+	return nil
 }
 
 // PauseSession marks an active session as paused
 func (r *Repository) PauseSession(sessionID string) error {
-	query := `UPDATE pomodoro_sessions SET paused_at = ?, rest_duration = 0 WHERE id = ?`
-	_, err := r.db.Exec(query, time.Now(), sessionID)
-	return err
+	query := `UPDATE pomodoro_sessions SET paused_at = ?, rest_duration = 0 WHERE id = ? AND ended_at IS NULL AND paused_at IS NULL`
+	result, err := r.db.Exec(query, time.Now(), sessionID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrSessionNotActive
+	}
+	return nil
 }
 
 // ResumeSession resumes a paused session, adjusting started_at
 func (r *Repository) ResumeSession(sessionID string, pausedMillis int) error {
 	// Adjust started_at forward by the pause duration
-	query := `UPDATE pomodoro_sessions SET paused_at = NULL, started_at = datetime(started_at, '+' || ? || ' seconds') WHERE id = ?`
-	seconds := float64(pausedMillis) / 1000.0
-	_, err := r.db.Exec(query, seconds, sessionID)
-	return err
+	query := `UPDATE pomodoro_sessions SET paused_at = NULL, started_at = datetime(started_at, '+' || ? || ' seconds') WHERE id = ? AND ended_at IS NULL AND paused_at IS NOT NULL`
+	result, err := r.db.Exec(query, float64(pausedMillis)/1000.0, sessionID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrSessionNotActive
+	}
+	return nil
 }
 
 // GetLatestSessionByMemberID returns the most recent session (active or completed)
