@@ -86,9 +86,17 @@
 		// Always stop current timer on state change
 		countdown.halt();
 
-		// Sync sessionIndex from store (only when not idle)
-		if (s.phase !== 'idle' && s.sessions_completed !== undefined) {
-			sessionIndex = s.sessions_completed;
+		// Sync state from SSE (only when not idle — idle events may have undefined values)
+		if (s.phase !== 'idle') {
+			if (s.sessions_completed !== undefined) {
+				sessionIndex = s.sessions_completed;
+			}
+			if (s.total_sessions !== undefined && s.total_sessions > 0) {
+				totalSessions = s.total_sessions;
+			}
+			if (s.planned_duration !== undefined && s.planned_duration > 0) {
+				plannedMinutes = Math.floor(s.planned_duration / 60);
+			}
 		}
 
 		// Start timer for ticking states
