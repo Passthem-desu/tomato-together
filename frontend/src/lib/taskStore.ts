@@ -87,6 +87,16 @@ export const taskStore = {
 		if (fromIdx < 0 || fromIdx >= tasks.length || toIdx < 0 || toIdx >= tasks.length) return;
 		const [item] = tasks.splice(fromIdx, 1);
 		tasks.splice(toIdx, 0, item);
+
+		// Re-index sort_order and update timestamps for all shifted items
+		const now = new Date().toISOString();
+		const start = Math.min(fromIdx, toIdx);
+		const end = Math.max(fromIdx, toIdx);
+		for (let i = start; i <= end; i++) {
+			tasks[i].sort_order = i;
+			tasks[i].updated_at = now;
+		}
+
 		save(tasks);
 	},
 
@@ -103,14 +113,14 @@ export const taskStore = {
 			try {
 				const resp = await api.syncTasks(
 					roomName,
-					unsynced.map((t, index) => ({
+					unsynced.map((t) => ({
 						client_id: t.client_id,
 						title: t.title,
 						status: t.status,
 						tag_id: t.tag_id || '',
 						created_at: t.created_at,
 						updated_at: t.updated_at,
-						sort_order: index,
+						sort_order: t.sort_order ?? local.indexOf(t),
 					}))
 				);
 				for (const r of resp.data.tasks) {
