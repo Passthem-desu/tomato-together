@@ -292,10 +292,10 @@ func (h *Handler) CheckUser(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	_ = userStatus
 
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
+		"data":    userStatus,
 	})
 }
 
