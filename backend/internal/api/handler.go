@@ -287,7 +287,7 @@ func (h *Handler) CheckUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-userStatus, err := h.svc.CheckUsername(roomName, req.Username)
+	userStatus, err := h.svc.CheckUsername(roomName, req.Username)
 	if err != nil {
 		h.writeError(w, http.StatusNotFound, err.Error())
 		return
@@ -929,7 +929,7 @@ func (h *Handler) CreateTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-tag, err := h.svc.CreateTag(token.MemberID, token.RoomID, req.Name)
+	tag, err := h.svc.CreateTag(token.MemberID, token.RoomID, req.Name)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error")
 		return

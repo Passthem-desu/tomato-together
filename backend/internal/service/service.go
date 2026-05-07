@@ -1180,14 +1180,14 @@ func (s *Service) GetPomodoroStatus(tokenValue string) (*models.PomodoroStatusRe
 		}
 
 		response := &models.PomodoroStatusResponse{
-			Phase:              phase,
-			SessionID:          session.ID,
-			StartedAt:          session.StartedAt.Format(time.RFC3339),
-			PausedAt:           pausedAt,
-			RemainingSeconds:   remaining,
-			PlannedDuration:    session.PlannedDuration,
-			SessionsCompleted:  session.SessionIndex,
-			TotalSessions:      session.TotalSessions,
+			Phase:             phase,
+			SessionID:         session.ID,
+			StartedAt:         session.StartedAt.Format(time.RFC3339),
+			PausedAt:          pausedAt,
+			RemainingSeconds:  remaining,
+			PlannedDuration:   session.PlannedDuration,
+			SessionsCompleted: session.SessionIndex,
+			TotalSessions:     session.TotalSessions,
 		}
 
 		if session.IsFollowed && session.LeaderID != "" {
@@ -1212,12 +1212,12 @@ func (s *Service) GetPomodoroStatus(tokenValue string) (*models.PomodoroStatusRe
 				remaining = 0
 			}
 			return &models.PomodoroStatusResponse{
-				Phase:              "rest",
-				RemainingSeconds:   remaining,
-				RestDuration:       latest.RestDuration,
-				IsLongBreak:        latest.IsLongBreak,
-				SessionsCompleted:  latest.SessionIndex,
-				TotalSessions:      latest.TotalSessions,
+				Phase:             "rest",
+				RemainingSeconds:  remaining,
+				RestDuration:      latest.RestDuration,
+				IsLongBreak:       latest.IsLongBreak,
+				SessionsCompleted: latest.SessionIndex,
+				TotalSessions:     latest.TotalSessions,
 			}, nil
 		}
 	}

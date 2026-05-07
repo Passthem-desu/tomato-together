@@ -42,7 +42,7 @@
 	let totalSessions = $state(4);
 	let sessionsBeforeLong = $state(4);
 	let sessionIndex = $state(0);
-	let skippingRest = $state(false);  // suppress idle flash during skip→focus transition
+	let skippingRest = $state(false); // suppress idle flash during skip→focus transition
 	let showSettings = $state(false);
 	let notifyEnabled = $state(loadNotifyPref());
 	let soundVersion = $state(0);
@@ -259,7 +259,9 @@
 		try {
 			const resp = await api.getPomodoroStatus();
 			if (resp.data) pomodoroStatus.set(resp.data);
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 	}
 
 	function formatMinutes(sec: number) {

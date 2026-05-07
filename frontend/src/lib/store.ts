@@ -88,7 +88,9 @@ export function connectSSE() {
 			pomodoroStatus.update((prev) => ({
 				...prev,
 				phase: data.phase,
-				...(data.remaining_seconds !== undefined ? { remaining_seconds: data.remaining_seconds } : {}),
+				...(data.remaining_seconds !== undefined
+					? { remaining_seconds: data.remaining_seconds }
+					: {}),
 			}));
 		}
 		refreshRoomUsers();
