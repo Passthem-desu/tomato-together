@@ -10,6 +10,7 @@ export type SSEEventType =
 	| 'pomodoro_ended'
 	| 'pomodoro_followed'
 	| 'pomodoro_unfollowed'
+	| 'pomodoro_state'
 	| 'leader_aborted'
 	| 'status_updated'
 	| 'announcement'
@@ -40,6 +41,7 @@ const EVENT_TYPES: SSEEventType[] = [
 	'pomodoro_ended',
 	'pomodoro_followed',
 	'pomodoro_unfollowed',
+	'pomodoro_state',
 	'leader_aborted',
 	'status_updated',
 	'announcement',

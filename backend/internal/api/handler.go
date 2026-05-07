@@ -287,15 +287,15 @@ func (h *Handler) CheckUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userStatus, err := h.svc.CheckUsername(roomName, req.Username)
+userStatus, err := h.svc.CheckUsername(roomName, req.Username)
 	if err != nil {
 		h.writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
+	_ = userStatus
 
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
-		"data":    userStatus,
 	})
 }
 
@@ -679,10 +679,10 @@ func (h *Handler) StartPomodoro(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	_ = resp
 
 	h.writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"success": true,
-		"data":    resp,
 	})
 }
 
@@ -757,10 +757,10 @@ func (h *Handler) EndPomodoro(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	_ = resp
 
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
-		"data":    resp,
 	})
 }
 
@@ -799,10 +799,10 @@ func (h *Handler) PausePomodoro(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	_ = resp
 
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
-		"data":    resp,
 	})
 }
 
@@ -818,10 +818,10 @@ func (h *Handler) ResumePomodoro(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	_ = resp
 
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
-		"data":    resp,
 	})
 }
 
@@ -832,17 +832,15 @@ func (h *Handler) SkipRest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.svc.SkipRest(token.Token)
+	resp, err := h.svc.SkipRest(token.Token)
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	_ = resp
 
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
-		"data": map[string]string{
-			"phase": "idle",
-		},
 	})
 }
 
@@ -931,15 +929,15 @@ func (h *Handler) CreateTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tag, err := h.svc.CreateTag(token.MemberID, token.RoomID, req.Name)
+tag, err := h.svc.CreateTag(token.MemberID, token.RoomID, req.Name)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
+	_ = tag
 
 	h.writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"success": true,
-		"data":    tag,
 	})
 }
 

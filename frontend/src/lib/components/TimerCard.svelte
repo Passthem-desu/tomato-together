@@ -56,7 +56,7 @@
 </script>
 
 <div class="card timer-card">
-	{#if sessionIndex > 0}
+	{#if phase !== 'idle' && sessionIndex > 0}
 		<p class="session-progress">{sessionIndex} / {totalSessions}</p>
 	{/if}
 

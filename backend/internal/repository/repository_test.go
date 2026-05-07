@@ -70,6 +70,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 		planned_long_break_duration INTEGER DEFAULT 900,
 		sessions_before_long_break INTEGER DEFAULT 4,
 		session_index INTEGER DEFAULT 0,
+		total_sessions INTEGER DEFAULT 0,
 		FOREIGN KEY (member_id) REFERENCES room_members(id),
 		FOREIGN KEY (room_id) REFERENCES rooms(id)
 	);

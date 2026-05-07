@@ -500,7 +500,7 @@ export const api = {
 	},
 
 	// Skip rest
-	skipRest: async (): Promise<{ success: boolean }> => {
+	skipRest: async (): Promise<{ success: boolean; data: PomodoroStatus }> => {
 		return apiRequest('/pomodoro/skip-rest', { method: 'POST' });
 	},
 

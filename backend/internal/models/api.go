@@ -87,6 +87,7 @@ type PomodoroStatusResponse struct {
 	IsLongBreak             bool   `json:"is_long_break,omitempty"`
 	ShouldTakeLongBreak     bool   `json:"should_take_long_break,omitempty"`
 	SessionsCompleted       int    `json:"sessions_completed,omitempty"`
+	TotalSessions           int    `json:"total_sessions,omitempty"`
 }
 
 // CreateRoomRequest is the request for creating a room
@@ -134,6 +135,7 @@ type StartPomodoroRequest struct {
 	LongBreakDuration       int    `json:"long_break_duration"`
 	SessionsBeforeLongBreak int    `json:"sessions_before_long_break"`
 	SessionIndex            int    `json:"session_index,omitempty"` // 1-based batch position
+	TotalSessions           int    `json:"total_sessions,omitempty"`
 }
 
 // FollowPomodoroRequest is the request for following a pomodoro

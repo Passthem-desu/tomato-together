@@ -79,6 +79,7 @@ type PomodoroSession struct {
 	PlannedLongBreakDuration int        `json:"-"`
 	SessionsBeforeLongBreak  int        `json:"-"`
 	SessionIndex             int        `json:"-"` // 1-based per-batch index
+	TotalSessions            int        `json:"-"`
 }
 
 // UserStatus represents a user's status

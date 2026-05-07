@@ -59,6 +59,17 @@ type Message struct {
 	Data     interface{}
 }
 
+// PomodoroStateEvent carries the full pomodoro state for SSE broadcast.
+type PomodoroStateEvent struct {
+	UserID            string `json:"user_id"`
+	Phase             string `json:"phase"`
+	RemainingSeconds  int    `json:"remaining_seconds"`
+	SessionsCompleted int    `json:"sessions_completed,omitempty"`
+	TotalSessions     int    `json:"total_sessions,omitempty"`
+	IsLongBreak       bool   `json:"is_long_break,omitempty"`
+	PlannedDuration   int    `json:"planned_duration,omitempty"`
+}
+
 var globalHub *Hub
 
 // NewHub creates a new Hub instance
@@ -265,6 +276,11 @@ func (h *Hub) BroadcastEvent(roomName, event string, data interface{}) {
 		Event:    event,
 		Data:     data,
 	}
+}
+
+// BroadcastPomodoroState sends the full pomodoro state to all clients in a room.
+func (h *Hub) BroadcastPomodoroState(roomName string, event *PomodoroStateEvent) {
+	h.BroadcastEvent(roomName, "pomodoro_state", event)
 }
 
 // broadcastToRoom sends an event to all clients in a room

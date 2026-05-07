@@ -12,6 +12,9 @@
 		startPomodoro,
 		endPomodoro,
 		unfollowPomodoro,
+		pausePomodoro,
+		resumePomodoro,
+		skipRest,
 		refreshRoomUsers,
 		logout,
 		connectSSE,
@@ -39,6 +42,7 @@
 	let totalSessions = $state(4);
 	let sessionsBeforeLong = $state(4);
 	let sessionIndex = $state(0);
+	let skippingRest = $state(false);  // suppress idle flash during skip→focus transition
 	let showSettings = $state(false);
 	let notifyEnabled = $state(loadNotifyPref());
 	let soundVersion = $state(0);
@@ -78,16 +82,29 @@
 	// Single source of truth: sync countdown from pomodoroStatus
 	$effect(() => {
 		const s = $pomodoroStatus;
-		if (s.phase === 'idle') {
-			countdown.syncFromServer(0);
-			displayTime = plannedMinutes * 60;
-		} else if (s.phase === 'paused') {
-			countdown.halt();
-			if (s.remaining_seconds !== undefined) displayTime = s.remaining_seconds;
-		} else if (s.remaining_seconds !== undefined) {
-			countdown.syncFromServer(s.remaining_seconds);
-			displayTime = s.remaining_seconds;
+
+		// Always stop current timer on state change
+		countdown.halt();
+
+		// Sync sessionIndex from store (only when not idle)
+		if (s.phase !== 'idle' && s.sessions_completed !== undefined) {
+			sessionIndex = s.sessions_completed;
 		}
+
+		// Start timer for ticking states
+		if (s.phase === 'focusing' || s.phase === 'following' || s.phase === 'rest') {
+			if (s.remaining_seconds && s.remaining_seconds > 0) {
+				countdown.syncFromServer(s.remaining_seconds);
+			}
+		}
+
+		// Set displayTime for non-ticking states
+		if (s.phase === 'paused' && s.remaining_seconds !== undefined) {
+			displayTime = s.remaining_seconds;
+		} else if (s.phase === 'idle' && !skippingRest) {
+			displayTime = plannedMinutes * 60;
+		}
+		// ticking states: displayTime set by countdown.on('tick') below
 	});
 
 	// ── Countdown events ──
@@ -102,48 +119,38 @@
 	unsubs.push(
 		countdown.on('complete', async () => {
 			const phase = $pomodoroStatus.phase;
-			if (phase === 'focusing' || phase === 'following') {
-				let restSec = restMinutes * 60;
-				try {
-					await endPomodoro(false, sessionIndex);
-					restSec =
-						$pomodoroStatus.remaining_seconds ||
-						$pomodoroStatus.rest_duration ||
-						restSec;
-				} catch {
-					/* offline */
-				}
-				sound.play('focus_end');
-				notifyPomodoroEnd();
-			} else if (phase === 'rest') {
-				sound.play('rest_end');
-				notifyRestEnd();
-				if (sessionIndex < totalSessions) {
-					sessionIndex++;
-					try {
+			try {
+				if (phase === 'focusing' || phase === 'following') {
+					await endPomodoro(false);
+					sound.play('focus_end');
+					notifyPomodoroEnd();
+				} else if (phase === 'rest') {
+					sound.play('rest_end');
+					notifyRestEnd();
+					if (sessionIndex < totalSessions) {
 						await startNextFocus();
-					} catch {
-						/* offline */
+					} else {
+						sound.play('all_done');
+						notifyAllDone();
 					}
-				} else {
-					sessionIndex = 0;
-					pomodoroStatus.set({ phase: 'idle' });
-					sound.play('all_done');
-					notifyAllDone();
 				}
+				// idle: nothing (SSE will handle state)
+			} catch {
+				// SSE will correct state on next tick
 			}
 		})
 	);
 
-	async function startNextFocus() {
+	async function startNextFocus(sessionIdx?: number) {
+		const idx = sessionIdx ?? sessionIndex + 1;
 		await startPomodoro({
 			planned_duration: plannedMinutes * 60,
 			rest_duration: restMinutes * 60,
 			long_break_duration: longBreakMinutes * 60,
 			sessions_before_long_break: sessionsBeforeLong,
-			session_index: sessionIndex,
+			session_index: idx,
+			total_sessions: totalSessions,
 		});
-		// $effect syncs countdown from pomodoroStatus automatically
 	}
 
 	// ── Persist settings to localStorage ──
@@ -188,41 +195,48 @@
 	// ── Actions ──
 	async function handleStart() {
 		sound.play('focus_start');
-		sessionIndex = 1;
-		await startNextFocus();
+		await startPomodoro({
+			planned_duration: plannedMinutes * 60,
+			rest_duration: restMinutes * 60,
+			long_break_duration: longBreakMinutes * 60,
+			sessions_before_long_break: sessionsBeforeLong,
+			session_index: 1,
+			total_sessions: totalSessions,
+		});
 	}
 
 	async function handlePause() {
 		sound.play('focus_pause');
-		const resp = await api.pausePomodoro();
-		if (resp.data) pomodoroStatus.set(resp.data);
+		await pausePomodoro();
 	}
 
 	async function handleResume() {
 		sound.play('focus_resume');
-		const resp = await api.resumePomodoro();
-		if (resp.data) pomodoroStatus.set(resp.data);
+		await resumePomodoro();
 	}
 
 	async function handleSkip() {
 		sound.play('rest_end');
 		notifyRestEnd();
-		await api.skipRest();
-		pomodoroStatus.set({ phase: 'idle' });
-		if (sessionIndex < totalSessions) {
-			sessionIndex++;
-			await startNextFocus();
+		const oldIndex = sessionIndex;
+		skippingRest = true;
+		const ok = await skipRest();
+		if (!ok) {
+			skippingRest = false;
+			return;
+		}
+		if (oldIndex < totalSessions) {
+			await startNextFocus(oldIndex + 1);
 		} else {
-			sessionIndex = 0;
 			sound.play('all_done');
 			notifyAllDone();
 		}
+		skippingRest = false;
 	}
 
 	async function handleStop() {
 		sound.play('focus_end');
 		await endPomodoro(true);
-		sessionIndex = 0;
 	}
 
 	async function handleEnd() {
@@ -244,18 +258,8 @@
 	async function restorePomodoroState() {
 		try {
 			const resp = await api.getPomodoroStatus();
-			if (resp.data) {
-				pomodoroStatus.set(resp.data);
-				if (
-					resp.data.sessions_completed !== undefined &&
-					resp.data.sessions_completed > 0
-				) {
-					sessionIndex = resp.data.sessions_completed;
-				}
-			}
-		} catch {
-			/* ignore */
-		}
+			if (resp.data) pomodoroStatus.set(resp.data);
+		} catch { /* ignore */ }
 	}
 
 	function formatMinutes(sec: number) {

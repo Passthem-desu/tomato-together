@@ -85,7 +85,27 @@ export function connectSSE() {
 	const unsubPhase = sseClient.on('phase_changed', (data: any) => {
 		const currentId = get(currentMember)?.id;
 		if (data.user_id === currentId) {
-			pomodoroStatus.update((prev) => ({ ...prev, phase: data.phase }));
+			pomodoroStatus.update((prev) => ({
+				...prev,
+				phase: data.phase,
+				...(data.remaining_seconds !== undefined ? { remaining_seconds: data.remaining_seconds } : {}),
+			}));
+		}
+		refreshRoomUsers();
+	});
+
+	// Handle pomodoro_state: single source of truth for full pomodoro state
+	const unsubPomodoroState = sseClient.on('pomodoro_state', (data: any) => {
+		const currentId = get(currentMember)?.id;
+		if (data.user_id === currentId) {
+			pomodoroStatus.set({
+				phase: data.phase,
+				remaining_seconds: data.remaining_seconds,
+				sessions_completed: data.sessions_completed,
+				total_sessions: data.total_sessions,
+				is_long_break: data.is_long_break,
+				planned_duration: data.planned_duration,
+			});
 		}
 		refreshRoomUsers();
 	});
@@ -120,6 +140,7 @@ export function connectSSE() {
 		unsubUnfollowed,
 		unsubStatus,
 		unsubPhase,
+		unsubPomodoroState,
 		unsubTokenExpired,
 		unsubKicked,
 		unsubAnnouncement,
@@ -377,12 +398,10 @@ export async function startPomodoro(options?: {
 		const roomName = get(currentRoom)?.name;
 		if (!roomName) throw new Error('Not in a room');
 
-		const response = await api.startPomodoro({
+		await api.startPomodoro({
 			room_name: roomName,
 			...options,
 		});
-
-		pomodoroStatus.set(response.data);
 
 		return true;
 	} catch (e: any) {
@@ -401,12 +420,10 @@ export async function followPomodoro(leaderId: string) {
 		const roomName = get(currentRoom)?.name;
 		if (!roomName) throw new Error('Not in a room');
 
-		const response = await api.followPomodoro({
+		await api.followPomodoro({
 			room_name: roomName,
 			leader_id: leaderId,
 		});
-
-		pomodoroStatus.set(response.data);
 
 		return true;
 	} catch (e: any) {
@@ -414,6 +431,39 @@ export async function followPomodoro(leaderId: string) {
 		return false;
 	} finally {
 		isLoading.set(false);
+	}
+}
+
+export async function pausePomodoro(): Promise<boolean> {
+	const room = get(currentRoom);
+	if (!room) return false;
+	try {
+		await api.pausePomodoro();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+export async function resumePomodoro(): Promise<boolean> {
+	const room = get(currentRoom);
+	if (!room) return false;
+	try {
+		await api.resumePomodoro();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+export async function skipRest(): Promise<boolean> {
+	const room = get(currentRoom);
+	if (!room) return false;
+	try {
+		await api.skipRest();
+		return true;
+	} catch {
+		return false;
 	}
 }
 
@@ -426,7 +476,6 @@ export async function unfollowPomodoro() {
 		if (!roomName) throw new Error('Not in a room');
 
 		await api.unfollowPomodoro(roomName);
-		pomodoroStatus.set({ phase: 'idle' });
 
 		return true;
 	} catch (e: any) {
@@ -445,8 +494,7 @@ export async function endPomodoro(aborted = false, sessionIndex = 0) {
 		const roomName = get(currentRoom)?.name;
 		if (!roomName) throw new Error('Not in a room');
 
-		const response = await api.endPomodoro(roomName, aborted, sessionIndex);
-		pomodoroStatus.set(response.data);
+		await api.endPomodoro(roomName, aborted, sessionIndex);
 
 		return true;
 	} catch (e: any) {

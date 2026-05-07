@@ -845,6 +845,15 @@ func (s *Service) StartPomodoro(tokenValue string, req *models.StartPomodoroRequ
 		StartedAt:                time.Now(),
 	}
 
+	// Set TotalSessions from request, default to 4
+	totalSessions := req.TotalSessions
+	if totalSessions <= 0 {
+		totalSessions = 4
+	}
+	session.TotalSessions = totalSessions
+
+	// Check-then-insert atomically to prevent duplicate active sessions
+
 	// Check-then-insert atomically to prevent duplicate active sessions
 	err = s.repo.RunInTx(func(tx *sql.Tx) error {
 		// Check for existing active session inside the transaction
@@ -860,14 +869,14 @@ func (s *Service) StartPomodoro(tokenValue string, req *models.StartPomodoroRequ
 		}
 
 		// No active session — insert the new one
-		insertQuery := `INSERT INTO pomodoro_sessions (id, member_id, room_id, tag_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		insertQuery := `INSERT INTO pomodoro_sessions (id, member_id, room_id, tag_id, task_id, duration, planned_duration, is_followed, leader_id, started_at, ended_at, paused_at, rest_duration, is_long_break, planned_rest_duration, planned_long_break_duration, sessions_before_long_break, session_index, total_sessions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		_, execErr := tx.Exec(insertQuery,
 			session.ID, session.MemberID, session.RoomID, session.TagID, session.TaskID,
 			session.Duration, session.PlannedDuration, 0, session.LeaderID,
 			session.StartedAt, session.EndedAt, session.PausedAt,
 			session.RestDuration, 0,
 			session.PlannedRestDuration, session.PlannedLongBreakDuration,
-			session.SessionsBeforeLongBreak, session.SessionIndex,
+			session.SessionsBeforeLongBreak, session.SessionIndex, session.TotalSessions,
 		)
 		return execErr
 	})
@@ -876,6 +885,24 @@ func (s *Service) StartPomodoro(tokenValue string, req *models.StartPomodoroRequ
 	}
 
 	go s.broadcastPomodoroStarted(token.RoomID, token.MemberID, session.ID, session.StartedAt)
+	go func() {
+		hub := sse.GetHub()
+		if hub == nil {
+			return
+		}
+		room, err := s.repo.GetRoomByID(token.RoomID)
+		if err != nil {
+			return
+		}
+		hub.BroadcastPomodoroState(room.Name, &sse.PomodoroStateEvent{
+			UserID:            token.MemberID,
+			Phase:             "focusing",
+			RemainingSeconds:  plannedDuration,
+			SessionsCompleted: session.SessionIndex,
+			TotalSessions:     session.TotalSessions,
+			PlannedDuration:   plannedDuration,
+		})
+	}()
 
 	return &models.PomodoroStatusResponse{
 		Phase:                   "focusing",
@@ -886,6 +913,8 @@ func (s *Service) StartPomodoro(tokenValue string, req *models.StartPomodoroRequ
 		RestDuration:            restDuration,
 		LongBreakDuration:       longBreakDuration,
 		SessionsBeforeLongBreak: sessionsBeforeLongBreak,
+		SessionsCompleted:       session.SessionIndex,
+		TotalSessions:           session.TotalSessions,
 	}, nil
 }
 
@@ -1048,6 +1077,23 @@ func (s *Service) EndPomodoro(tokenValue string, req *models.EndPomodoroRequest)
 
 	if req.Aborted {
 		go s.broadcastPomodoroEnded(token.RoomID, token.MemberID, session.ID, recordedDuration, "aborted")
+		go func() {
+			hub := sse.GetHub()
+			if hub == nil {
+				return
+			}
+			room, err := s.repo.GetRoomByID(token.RoomID)
+			if err != nil {
+				return
+			}
+			hub.BroadcastPomodoroState(room.Name, &sse.PomodoroStateEvent{
+				UserID:            token.MemberID,
+				Phase:             "idle",
+				RemainingSeconds:  0,
+				SessionsCompleted: session.SessionIndex,
+				TotalSessions:     session.TotalSessions,
+			})
+		}()
 		return &models.PomodoroStatusResponse{
 			Phase:             "idle",
 			SessionID:         session.ID,
@@ -1072,6 +1118,24 @@ func (s *Service) EndPomodoro(tokenValue string, req *models.EndPomodoroRequest)
 	}
 
 	go s.broadcastPomodoroEnded(token.RoomID, token.MemberID, session.ID, recordedDuration, "rest")
+	go func() {
+		hub := sse.GetHub()
+		if hub == nil {
+			return
+		}
+		room, err := s.repo.GetRoomByID(token.RoomID)
+		if err != nil {
+			return
+		}
+		hub.BroadcastPomodoroState(room.Name, &sse.PomodoroStateEvent{
+			UserID:            token.MemberID,
+			Phase:             "rest",
+			RemainingSeconds:  actualRest,
+			SessionsCompleted: session.SessionIndex,
+			TotalSessions:     session.TotalSessions,
+			IsLongBreak:       shouldTakeLongBreak,
+		})
+	}()
 
 	return &models.PomodoroStatusResponse{
 		Phase:               "rest",
@@ -1116,12 +1180,14 @@ func (s *Service) GetPomodoroStatus(tokenValue string) (*models.PomodoroStatusRe
 		}
 
 		response := &models.PomodoroStatusResponse{
-			Phase:            phase,
-			SessionID:        session.ID,
-			StartedAt:        session.StartedAt.Format(time.RFC3339),
-			PausedAt:         pausedAt,
-			RemainingSeconds: remaining,
-			PlannedDuration:  session.PlannedDuration,
+			Phase:              phase,
+			SessionID:          session.ID,
+			StartedAt:          session.StartedAt.Format(time.RFC3339),
+			PausedAt:           pausedAt,
+			RemainingSeconds:   remaining,
+			PlannedDuration:    session.PlannedDuration,
+			SessionsCompleted:  session.SessionIndex,
+			TotalSessions:      session.TotalSessions,
 		}
 
 		if session.IsFollowed && session.LeaderID != "" {
@@ -1146,10 +1212,12 @@ func (s *Service) GetPomodoroStatus(tokenValue string) (*models.PomodoroStatusRe
 				remaining = 0
 			}
 			return &models.PomodoroStatusResponse{
-				Phase:            "rest",
-				RemainingSeconds: remaining,
-				RestDuration:     latest.RestDuration,
-				IsLongBreak:      latest.IsLongBreak,
+				Phase:              "rest",
+				RemainingSeconds:   remaining,
+				RestDuration:       latest.RestDuration,
+				IsLongBreak:        latest.IsLongBreak,
+				SessionsCompleted:  latest.SessionIndex,
+				TotalSessions:      latest.TotalSessions,
 			}, nil
 		}
 	}
@@ -1166,6 +1234,9 @@ func (s *Service) PausePomodoro(tokenValue string) (*models.PomodoroStatusRespon
 		return nil, err
 	}
 
+	var remainingSeconds int
+	var sessionsCompleted int
+	var totalSessions int
 	err = s.repo.RunInTx(func(tx *sql.Tx) error {
 		session, err := s.repo.GetActiveSessionByMemberIDInTx(tx, token.MemberID)
 		if err != nil || session == nil {
@@ -1174,6 +1245,14 @@ func (s *Service) PausePomodoro(tokenValue string) (*models.PomodoroStatusRespon
 		if session.PausedAt != nil {
 			return ErrAlreadyFollowing // Already paused
 		}
+
+		elapsed := int(time.Since(session.StartedAt).Seconds())
+		remainingSeconds = session.PlannedDuration - elapsed
+		if remainingSeconds < 0 {
+			remainingSeconds = 0
+		}
+		sessionsCompleted = session.SessionIndex
+		totalSessions = session.TotalSessions
 
 		if err := s.repo.PauseSessionInTx(tx, session.ID); err != nil {
 			if errors.Is(err, repository.ErrSessionNotActive) {
@@ -1187,7 +1266,23 @@ func (s *Service) PausePomodoro(tokenValue string) (*models.PomodoroStatusRespon
 		return nil, err
 	}
 
-	go s.broadcastPhaseChanged(token.RoomID, token.MemberID, "paused")
+	go func() {
+		hub := sse.GetHub()
+		if hub == nil {
+			return
+		}
+		room, err := s.repo.GetRoomByID(token.RoomID)
+		if err != nil {
+			return
+		}
+		hub.BroadcastPomodoroState(room.Name, &sse.PomodoroStateEvent{
+			UserID:            token.MemberID,
+			Phase:             "paused",
+			RemainingSeconds:  remainingSeconds,
+			SessionsCompleted: sessionsCompleted,
+			TotalSessions:     totalSessions,
+		})
+	}()
 	return s.GetPomodoroStatus(tokenValue)
 }
 
@@ -1197,6 +1292,9 @@ func (s *Service) ResumePomodoro(tokenValue string) (*models.PomodoroStatusRespo
 		return nil, err
 	}
 
+	var remainingSeconds int
+	var sessionsCompleted int
+	var totalSessions int
 	err = s.repo.RunInTx(func(tx *sql.Tx) error {
 		session, err := s.repo.GetActiveSessionByMemberIDInTx(tx, token.MemberID)
 		if err != nil || session == nil {
@@ -1205,6 +1303,14 @@ func (s *Service) ResumePomodoro(tokenValue string) (*models.PomodoroStatusRespo
 		if session.PausedAt == nil {
 			return ErrSessionNotActive // Not paused
 		}
+
+		elapsed := int(session.PausedAt.Sub(session.StartedAt).Seconds())
+		remainingSeconds = session.PlannedDuration - elapsed
+		if remainingSeconds < 0 {
+			remainingSeconds = 0
+		}
+		sessionsCompleted = session.SessionIndex
+		totalSessions = session.TotalSessions
 
 		pausedMillis := int(time.Since(*session.PausedAt).Milliseconds())
 		if err := s.repo.ResumeSessionInTx(tx, session.ID, pausedMillis); err != nil {
@@ -1219,58 +1325,97 @@ func (s *Service) ResumePomodoro(tokenValue string) (*models.PomodoroStatusRespo
 		return nil, err
 	}
 
-	go s.broadcastPhaseChanged(token.RoomID, token.MemberID, "focusing")
+	go func() {
+		hub := sse.GetHub()
+		if hub == nil {
+			return
+		}
+		room, err := s.repo.GetRoomByID(token.RoomID)
+		if err != nil {
+			return
+		}
+		hub.BroadcastPomodoroState(room.Name, &sse.PomodoroStateEvent{
+			UserID:            token.MemberID,
+			Phase:             "focusing",
+			RemainingSeconds:  remainingSeconds,
+			SessionsCompleted: sessionsCompleted,
+			TotalSessions:     totalSessions,
+		})
+	}()
 	return s.GetPomodoroStatus(tokenValue)
 }
 
-func (s *Service) SkipRest(tokenValue string) error {
+func (s *Service) SkipRest(tokenValue string) (*models.PomodoroStatusResponse, error) {
 	token, err := s.ValidateToken(tokenValue)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = s.repo.RunInTx(func(tx *sql.Tx) error {
+		now := time.Now()
+
+		// Path A: Check for active session (focusing/paused phase)
+		active, err := s.repo.GetActiveSessionByMemberIDInTx(tx, token.MemberID)
+		if err == nil && active != nil {
+			var duration int
+			if active.PausedAt != nil {
+				duration = int(active.PausedAt.Sub(active.StartedAt).Seconds())
+			} else {
+				duration = int(now.Sub(active.StartedAt).Seconds())
+			}
+			if duration < 60 {
+				duration = 0
+			}
+			err = s.repo.EndSessionWithRestInTx(tx, active.ID, &now, duration, 0, false)
+			if err != nil {
+				if errors.Is(err, repository.ErrSessionNotActive) {
+					return ErrNoActiveSession
+				}
+				return err
+			}
+			return nil
+		}
+
+		// Path B: Check for rest phase session (already ended, rest_duration > 0)
 		latest, err := s.repo.GetLatestSessionByMemberIDInTx(tx, token.MemberID)
 		if err != nil || latest == nil {
 			return ErrNoActiveSession
 		}
-
-		now := time.Now()
-		var duration int
-
-		if latest.EndedAt == nil {
-			active, err := s.repo.GetActiveSessionByMemberIDInTx(tx, token.MemberID)
-			if err == nil && active != nil && active.ID == latest.ID {
-				if active.PausedAt != nil {
-					duration = int(active.PausedAt.Sub(active.StartedAt).Seconds())
-				} else {
-					duration = int(now.Sub(active.StartedAt).Seconds())
-				}
-				if duration < 60 {
-					duration = 0
-				}
-			} else {
-				duration = latest.Duration
-			}
-		} else {
-			duration = latest.Duration
+		if latest.EndedAt == nil || latest.RestDuration <= 0 {
+			return ErrNoActiveSession
+		}
+		restEnd := latest.EndedAt.Add(time.Duration(latest.RestDuration) * time.Second)
+		if !now.Before(restEnd) {
+			// Rest already expired — nothing to skip
+			return ErrNoActiveSession
 		}
 
-		err = s.repo.EndSessionWithRestInTx(tx, latest.ID, &now, duration, 0, false)
+		// Zero out rest_duration to end the rest immediately
+		_, err = tx.Exec(`UPDATE pomodoro_sessions SET rest_duration = 0 WHERE id = ?`, latest.ID)
 		if err != nil {
-			if errors.Is(err, repository.ErrSessionNotActive) {
-				return ErrNoActiveSession
-			}
 			return err
 		}
 		return nil
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	go s.broadcastPhaseChanged(token.RoomID, token.MemberID, "idle")
-	return nil
+	go func() {
+		hub := sse.GetHub()
+		if hub == nil {
+			return
+		}
+		room, err := s.repo.GetRoomByID(token.RoomID)
+		if err != nil {
+			return
+		}
+		hub.BroadcastPomodoroState(room.Name, &sse.PomodoroStateEvent{
+			UserID: token.MemberID,
+			Phase:  "idle",
+		})
+	}()
+	return s.GetPomodoroStatus(tokenValue)
 }
 
 // Status operations
@@ -1648,7 +1793,7 @@ func checkPassword(password, hash string) bool {
 	return err == nil
 }
 
-func (s *Service) broadcastPhaseChanged(roomID, memberID, phase string) {
+func (s *Service) broadcastPhaseChanged(roomID, memberID, phase string, remainingSeconds int) {
 	hub := sse.GetHub()
 	if hub == nil {
 		return
@@ -1662,9 +1807,10 @@ func (s *Service) broadcastPhaseChanged(roomID, memberID, phase string) {
 		return
 	}
 	hub.BroadcastEvent(room.Name, "phase_changed", map[string]interface{}{
-		"user_id":  memberID,
-		"username": member.Username,
-		"phase":    phase,
+		"user_id":           memberID,
+		"username":          member.Username,
+		"phase":             phase,
+		"remaining_seconds": remainingSeconds,
 	})
 }
 
