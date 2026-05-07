@@ -50,3 +50,14 @@ backend/data/
 # Coverage
 coverage/
 *.out
+
+# ========== AI Agent 产物 ==========
+.sisyphus/
+CLAUDE.md
+.claude/
+.cursorrules
+.codebuddy/
+.windsurf/
+.continue/
+.aider*
+.gpt-*
