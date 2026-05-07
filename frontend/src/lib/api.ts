@@ -104,41 +104,95 @@ export interface PomodoroStatus {
 // API helper with JWT auto-refresh
 
 let refreshPromise: Promise<boolean> | null = null;
+const REFRESH_MAX_RETRIES = 3;
+const REFRESH_BASE_DELAY_MS = 1000;
 
 function getAccessToken(): string | null {
 	return localStorage.getItem('access_token') || localStorage.getItem('token');
 }
 
 async function tryRefresh(): Promise<boolean> {
-	const refreshToken = localStorage.getItem('refresh_token_' + getDeviceId());
-	if (!refreshToken) return false;
+	const refreshTokenKey = 'refresh_token_' + getDeviceId();
+	const refreshToken = localStorage.getItem(refreshTokenKey);
+	if (!refreshToken) {
+		console.warn('[auth] tryRefresh: no refresh_token in localStorage');
+		return false;
+	}
 
-	if (refreshPromise) return refreshPromise;
+	if (refreshPromise) {
+		console.log('[auth] tryRefresh: coalescing into existing refresh attempt');
+		return refreshPromise;
+	}
 
 	refreshPromise = (async () => {
 		try {
-			const response = await fetch(`${API_BASE}/auth/refresh`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ refresh_token: refreshToken }),
-			});
-			if (!response.ok) return false;
-
-			const data = await response.json();
-			if (data.success) {
-				localStorage.setItem('access_token', data.data.access_token);
-				localStorage.setItem('refresh_token_' + getDeviceId(), data.data.refresh_token);
-				return true;
-			}
-			return false;
-		} catch {
-			return false;
+			return await doRefresh(refreshToken, refreshTokenKey);
 		} finally {
 			refreshPromise = null;
 		}
 	})();
 
 	return refreshPromise;
+}
+
+async function doRefresh(refreshToken: string, refreshTokenKey: string): Promise<boolean> {
+	for (let attempt = 1; attempt <= REFRESH_MAX_RETRIES; attempt++) {
+		try {
+			const response = await fetch(`${API_BASE}/auth/refresh`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ refresh_token: refreshToken }),
+			});
+
+			if (response.ok) {
+				const data = await response.json();
+				if (data.success) {
+					localStorage.setItem('access_token', data.data.access_token);
+					localStorage.setItem(refreshTokenKey, data.data.refresh_token);
+					console.log('[auth] tryRefresh: succeeded on attempt', attempt);
+					return true;
+				}
+				console.warn('[auth] tryRefresh: success=false in response:', data);
+				return false;
+			}
+
+			// Client/token errors (4xx) — not retryable
+			if (response.status >= 400 && response.status < 500) {
+				const body = await response.text();
+				console.error('[auth] tryRefresh: server refused (' + response.status + '):', body);
+				return false;
+			}
+
+			// Server errors (5xx) — retryable
+			console.warn(
+				'[auth] tryRefresh: server error ' +
+					response.status +
+					', attempt ' +
+					attempt +
+					'/' +
+					REFRESH_MAX_RETRIES
+			);
+		} catch (e) {
+			// Network errors — retryable
+			console.warn(
+				'[auth] tryRefresh: network error, attempt ' +
+					attempt +
+					'/' +
+					REFRESH_MAX_RETRIES +
+					':',
+				e
+			);
+		}
+
+		if (attempt < REFRESH_MAX_RETRIES) {
+			const delay = REFRESH_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+			console.log('[auth] tryRefresh: retrying in ' + delay + 'ms');
+			await new Promise((resolve) => setTimeout(resolve, delay));
+		}
+	}
+
+	console.error('[auth] tryRefresh: all ' + REFRESH_MAX_RETRIES + ' attempts failed');
+	return false;
 }
 
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
