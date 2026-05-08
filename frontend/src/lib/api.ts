@@ -111,7 +111,7 @@ function getAccessToken(): string | null {
 	return localStorage.getItem('access_token') || localStorage.getItem('token');
 }
 
-async function tryRefresh(): Promise<boolean> {
+export async function tryRefresh(): Promise<boolean> {
 	const refreshTokenKey = 'refresh_token_' + getDeviceId();
 	const refreshToken = localStorage.getItem(refreshTokenKey);
 	if (!refreshToken) {

@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import type { Member, Room, UserInfo, PomodoroStatus } from './api';
-import { api, saveAuth, saveJWT, clearAuth } from './api';
+import { api, saveAuth, saveJWT, clearAuth, tryRefresh } from './api';
 import { SSEClient, type TickData } from './sse/client';
 import { getErrorMessage, locale, t } from './i18n';
 
@@ -112,8 +112,14 @@ export function connectSSE() {
 		refreshRoomUsers();
 	});
 
-	// Handle token expiry
-	const unsubTokenExpired = sseClient.on('token_expired', () => {
+	// Handle token expiry — try refresh before giving up
+	const unsubTokenExpired = sseClient.on('token_expired', async () => {
+		const refreshed = await tryRefresh();
+		if (refreshed) {
+			disconnectSSE();
+			connectSSE();
+			return;
+		}
 		error.set(t('token_expired', get(locale)));
 		logout();
 	});
